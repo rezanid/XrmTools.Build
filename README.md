@@ -5,7 +5,7 @@
 the consuming project retains control of the
 `Microsoft.PowerApps.MSBuild.Solution` version.
 
-## Implemented through Phase 3
+## Implemented through Phase 4
 
 The package currently proves conventional NuGet `build/` asset imports and a
 per-solution Dataverse version resolver. On a `.cdsproj`, resolution precedence is:
@@ -26,11 +26,12 @@ resolved version.
 The resolved value is exposed to later targets in the solution project as
 `XrmToolsResolvedSolutionVersion`.
 
-Explicit plugin-package project references are now classified separately from
+Explicit plugin-package project references are classified separately from
 unmarked C# and PCF references, with metadata retained and invalid/duplicate
-references diagnosed. **This prerelease does not pack, discover, or include their
-`.nupkg` files, or stamp `pluginpackage.xml`.** Builds with marked producers emit
-`XTB2005` to make that limitation visible. Phase 4 has not been implemented.
+references diagnosed. Phase 4 packs producers and validates their exact primary
+NuGet artifacts. **This prerelease does not include those `.nupkg` files in the
+solution ZIP or create/stamp `pluginpackage.xml`.** Builds with marked producers
+emit `XTB2005` to make that limitation visible. Phase 5 has not been implemented.
 
 ## Usage
 
@@ -40,7 +41,7 @@ it:
 ```xml
 <ItemGroup>
   <PackageReference Include="Microsoft.PowerApps.MSBuild.Solution" Version="2.14.1" />
-  <PackageReference Include="XrmTools.Build" Version="0.2.0-phase3.1" PrivateAssets="all" />
+  <PackageReference Include="XrmTools.Build" Version="0.3.0-phase4.1" PrivateAssets="all" />
 </ItemGroup>
 ```
 
@@ -91,8 +92,8 @@ need whatever output contract Microsoft's targets normally require.
 `XrmToolsGetPluginPackageProjects` returns `XrmToolsPluginPackageProject` items
 through MSBuild's `Returns`/`TargetOutputs` contract. All reference metadata is
 preserved, including unique names with publisher prefixes, `ManagedIdentityId`,
-`AdditionalProperties`, and the future `XrmToolsPluginPackagePath` override.
-These values are retained, not consumed for package staging in Phase 3. Duplicate
+`AdditionalProperties`, and the `XrmToolsPluginPackagePath` override.
+These values are retained, not consumed for solution staging yet. Duplicate
 marked paths, duplicate explicit unique names, missing projects, unsupported
 producer types, and invalid markers fail clearly. Computed package identities are
 not inferred from raw project XML. Producers need not reference XrmTools.Build.
@@ -101,17 +102,47 @@ Microsoft calls `GetProjectOutputPath` on every `ProjectReference`, regardless o
 `ReferenceOutputAssembly`. The adapter temporarily filters only marked references
 for that one Microsoft target, then restores them with their metadata on success.
 Normal restore/dependency builds retain the references; no Microsoft target is
-replaced and no second producer build is added. Restoration appends the marked
+replaced. Restoration appends the marked
 items, so their original interleaving is not guaranteed. Other hooks at this
 boundary can observe the temporary list, and a failed Microsoft target prevents
 the restoration hook from running in that failed project instance. See the
 architecture note before combining this prerelease with other reference-mutating
 extensions.
 
+### Exact artifact discovery
+
+`XrmToolsDiscoverPluginPackages` returns `XrmToolsPluginPackageArtifact` items:
+absolute artifact paths with `ProducerProject`, validated `PackageId`,
+`PackageVersion`, `DiscoverySource`, and original reference metadata. It also
+runs before Microsoft's solution packager. It processes classified items, not
+another edited ProjectReference list.
+
+Discovery runs normal reference prerequisites, then producer `Pack` with
+`NoBuild=true`; a multi-target producer's outer build first ensures all frameworks
+are available. Configuration, platform and `AdditionalProperties` are preserved.
+`BuildProjectReferences=false` requires prebuilt outputs for all package TFMs.
+The producer controls its output directory and NuGet version.
+
+Selection precedence is an exact reference `XrmToolsPluginPackagePath`, then an
+optional producer `XrmToolsGetPluginPackageArtifact` target, then NuGet's internal
+`_GetOutputItemsFromPack` adapter. No output-directory search is performed.
+The selected ZIP's nuspec must match the expected identity/version, and symbols
+packages are excluded. Explicit paths are solution-relative; producer-returned
+paths are producer-relative (absolute paths work in both).
+
+**The internal adapter is best-effort, not a public NuGet contract.** In the
+installed SDK it miscomputes versionless/custom-nuspec paths. It also rejects
+unchanged pre-existing files because it cannot distinguish incremental reuse
+from stale output after a naming change. Use a producer return contract or an
+explicit path for intentional reuse and unusual naming. Those still run Pack
+and validate identity/version; they do not bypass errors.
+
+See [artifact discovery](docs/artifact-discovery.md) for executable fallback
+examples, expected-identity metadata, diagnostics, and the tested matrix.
+
 ## Build and fixture
 
-Run the package-first regression suite with .NET, Python 3, Node/npm, and standard
-shell ZIP utilities:
+Run the package-first regression suite with .NET, Python 3, Node/npm, and Bash:
 
 ```sh
 ./eng/test-package.sh
@@ -128,6 +159,9 @@ It leaves the local package under
 and fixture copies, logs, binlogs, and restore graphs under `artifacts/`.
 Generated output is ignored. `python3 eng/test-targets.py` reruns target/integration
 tests after that local package has been built and restored.
+`python3 eng/test-artifacts.py` exercises Phase 4, including custom nuspecs,
+versionless output, symbols, NBGV, multi-target builds, invalid/ambiguous/missing
+artifacts, and Phase 3 failure recovery.
 
 The extension depends on Microsoft's `CopyCdsSolutionContent`,
 `ProcessCdsProjectReferencesOutputs`, `PowerAppsPackage`, and
@@ -143,7 +177,8 @@ range; changed/missing target definitions still require compatibility investigat
 | .NET SDK 10.0.403 / MSBuild 18.9.15 on macOS arm64 | Real packaging passed with Microsoft solution packages 2.13.1 and 2.14.1, and PCF package 2.14.1; not a broad platform certification |
 | Visual Studio MSBuild on Windows | Not yet tested |
 | Linux; IDE design-time/static-graph builds; other Microsoft versions | Not yet tested |
-| GitHub Actions / Azure DevOps | Not yet tested |
+| GitHub Actions | macOS/Windows .NET CI workflow added; results must be checked per run |
+| Azure DevOps | Not yet tested |
 | Dataverse import or upgrade | Not tested; a successfully packaged ZIP does not prove that replacing an existing server-side plugin package is supported |
 
 This is an early implementation, not a compatibility certification. See

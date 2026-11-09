@@ -49,6 +49,24 @@ and untested IDE/static-graph scenarios are documented in the architecture note.
 Phase 3 emits an explicit warning that recognized producer packages are not yet
 packed/included; artifact discovery and staging remain later phases.
 
+### Phase 4 refinement: validate internal predictions, expose explicit contracts
+
+Producer processing uses the classified items without new ProjectReference
+mutations. Pack retains producer-owned versions and paths. Selection prefers an
+exact reference override, then an optional producer Returns target, then the
+version-sensitive NuGet `_GetOutputItemsFromPack` adapter. The installed adapter
+omits some custom naming inputs, so predicted paths must not be trusted alone.
+Unchanged pre-existing adapter results fail closed; explicit contracts authorize
+incremental reuse without disabling package identity validation.
+
+A small netstandard2.0 helper inspects the actual package nuspec and uses
+NuGet.Versioning for identity semantics; built-in XML tasks cannot inspect ZIP
+entries or implement NuGet version normalization safely. Its private dependencies
+are shipped under tools, not as consumer NuGet dependencies. A second task in the
+same assembly copies resolved reference dimensions onto private producer items.
+No source XML or solution staging is added. Detailed contracts, evidence and
+limitations are in [artifact discovery](../artifact-discovery.md).
+
 ## Consequences
 
 - Direct `PackageReference` import, build ordering, and package contents must be

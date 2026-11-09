@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<package>
+  <metadata>
+    <id>$id$</id>
+    <version>$version$</version>
+    <authors>XrmTools fixture</authors>
+    <description>Substituted custom nuspec fixture.</description>
+  </metadata>
+  <files>
+    <file src="payload.txt" target="content" />
+  </files>
+</package>

@@ -14,7 +14,15 @@
                       Lines="$(PackageId)|$(PackageVersion)|$(Version)|$(FileVersion)|$(FixtureDimension)|$(Configuration)"
                       Overwrite="false" />
   </Target>
-  <Target Name="RejectFixturePack" BeforeTargets="Pack">
-    <Error Text="Fixture: Phase 3 must not call Pack." />
+  <Target Name="RecordFixtureProducerPack" AfterTargets="Pack">
+    <WriteLinesToFile File="$(BaseIntermediateOutputPath)pack-count.txt"
+                      Lines="$(PackageId)|$(PackageVersion)|$(Configuration)"
+                      Overwrite="false" />
+  </Target>
+  <Target Name="XrmToolsGetPluginPackageArtifact" Returns="@(_FixtureArtifact)">
+    <ItemGroup>
+      <_FixtureArtifact Include="$(MSBuildProjectDirectory)/bin/$(Configuration)/$(PackageId).$(PackageVersion).nupkg"
+                        PackageId="$(PackageId)" PackageVersion="$(PackageVersion)" />
+    </ItemGroup>
   </Target>
 </Project>

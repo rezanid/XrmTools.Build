@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<package>
+  <metadata>
+    <id>Literal.CustomProducer</id>
+    <version>3.4.5-rc.1</version>
+    <authors>XrmTools fixture</authors>
+    <description>Custom nuspec artifact discovery fixture.</description>
+  </metadata>
+  <files>
+    <file src="payload.txt" target="content" />
+  </files>
+</package>

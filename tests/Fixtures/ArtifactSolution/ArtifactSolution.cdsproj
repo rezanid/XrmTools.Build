@@ -1,0 +1,26 @@
+<Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)/$(MSBuildToolsVersion)/Microsoft.Common.props" />
+  <PropertyGroup>
+    <TargetFrameworkVersion>v4.6.2</TargetFrameworkVersion>
+    <TargetFramework>net462</TargetFramework>
+    <RestoreProjectStyle>PackageReference</RestoreProjectStyle>
+    <SolutionRootPath>../MinimalSolution/src</SolutionRootPath>
+    <FixtureMicrosoftVersion Condition="'$(FixtureMicrosoftVersion)' == ''">2.14.1</FixtureMicrosoftVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.PowerApps.MSBuild.Solution" Version="$(FixtureMicrosoftVersion)" />
+    <PackageReference Include="XrmTools.Build" Version="0.3.0-phase4.1" PrivateAssets="all" />
+    <ProjectReference Include="../ArtifactProducer/ArtifactProducer.csproj" ReferenceOutputAssembly="false">
+      <XrmToolsPluginPackage>true</XrmToolsPluginPackage>
+      <XrmToolsPluginPackageUniqueName>xt_ArtifactProducer</XrmToolsPluginPackageUniqueName>
+      <ManagedIdentityId>1a71c21a-cd2e-40f0-8a91-a31608d19900</ManagedIdentityId>
+      <FixtureUnknownMetadata>artifact metadata survives</FixtureUnknownMetadata>
+      <AdditionalProperties>Configuration=Release;FixtureDimension=Artifact</AdditionalProperties>
+      <XrmToolsPluginPackagePath>$(FixtureArtifactPath)</XrmToolsPluginPackagePath>
+      <XrmToolsPluginPackageId>$(FixtureExpectedId)</XrmToolsPluginPackageId>
+      <XrmToolsPluginPackageVersion>$(FixtureExpectedVersion)</XrmToolsPluginPackageVersion>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)/Microsoft.Common.targets" />
+</Project>

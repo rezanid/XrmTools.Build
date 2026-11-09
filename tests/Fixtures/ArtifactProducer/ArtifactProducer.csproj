@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework Condition="'$(FixtureMultiTarget)' != 'true'">net462</TargetFramework>
+    <TargetFrameworks Condition="'$(FixtureMultiTarget)' == 'true'">net462;netstandard2.0</TargetFrameworks>
+    <PackageVersion Condition="'$(FixturePackageVersion)' != ''">$(FixturePackageVersion)</PackageVersion>
+    <PackageOutputPath Condition="'$(FixtureOutputPath)' != ''">$(FixtureOutputPath)</PackageOutputPath>
+    <IncludeSymbols Condition="'$(FixtureSymbols)' != ''">true</IncludeSymbols>
+    <SymbolPackageFormat Condition="'$(FixtureSymbols)' != ''">$(FixtureSymbols)</SymbolPackageFormat>
+    <OutputFileNamesWithoutVersion>$(FixtureVersionless)</OutputFileNamesWithoutVersion>
+    <GeneratePackageOnBuild>$(FixtureGenerateOnBuild)</GeneratePackageOnBuild>
+    <NuspecFile Condition="'$(FixtureCustomNuspec)' == 'true'">custom.nuspec</NuspecFile>
+    <NuspecFile Condition="'$(FixtureCustomNuspec)' == 'substituted'">substituted.nuspec</NuspecFile>
+    <NuspecProperties Condition="'$(FixtureCustomNuspec)' == 'substituted'">id=Substituted.$(MSBuildProjectName);version=4.5.6-preview.7</NuspecProperties>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <PackageReference Include="Nerdbank.GitVersioning" Version="3.10.94" PrivateAssets="all"
+                      Condition="'$(FixtureNbgv)' == 'true'" />
+  </ItemGroup>
+  <Target Name="RecordProducerBuild" AfterTargets="Build">
+    <WriteLinesToFile File="$(BaseIntermediateOutputPath)build-count-$(TargetFramework).txt"
+                      Lines="$(PackageId)|$(PackageVersion)|$(Version)|$(FileVersion)|$(Configuration)|$(FixtureDimension)"
+                      Overwrite="false" />
+  </Target>
+  <Target Name="RecordProducerPack" AfterTargets="Pack">
+    <WriteLinesToFile File="$(BaseIntermediateOutputPath)pack-count.txt"
+                      Lines="$(PackageId)|$(PackageVersion)|$(Configuration)" Overwrite="false" />
+    <Delete Files="$(FixtureDeleteArtifact)" Condition="'$(FixtureDeleteArtifact)' != ''" />
+  </Target>
+  <Target Name="XrmToolsGetPluginPackageArtifact" Returns="@(_FixtureArtifact)"
+          Condition="'$(FixtureReturnedPaths)' != ''">
+    <ItemGroup>
+      <_FixtureArtifact Include="$(FixtureReturnedPaths)">
+        <PackageId Condition="'$(FixtureContractId)' == ''">$(PackageId)</PackageId>
+        <PackageId Condition="'$(FixtureContractId)' != ''">$(FixtureContractId)</PackageId>
+        <PackageVersion Condition="'$(FixtureContractVersion)' == ''">$(PackageVersion)</PackageVersion>
+        <PackageVersion Condition="'$(FixtureContractVersion)' != ''">$(FixtureContractVersion)</PackageVersion>
+      </_FixtureArtifact>
+      <_FixtureArtifact Include="second.nupkg" Condition="'$(FixtureAmbiguousReturn)' == 'true'" />
+    </ItemGroup>
+  </Target>
+</Project>

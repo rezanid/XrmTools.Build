@@ -4,7 +4,8 @@ The solution references two explicitly marked C# producers, an unmarked C# proje
 with an empty `GetProjectOutputPath` contract, and an unmarked PCF project.
 Producer A does not reference XrmTools.Build; producer B does. Their package IDs
 are calculated in imported props, not read from literal project XML. Neither
-producer implements Microsoft's assembly-output contract; both reject `Pack`.
+producer implements Microsoft's assembly-output contract. Phase 4 now packs them
+and uses their explicit artifact-return contract, which supports incremental reuse.
 Producer A builds in Debug, while producer B's reference requests Release through
 AdditionalProperties. Both keep their own independent NuGet versions.
 
@@ -19,5 +20,5 @@ The test runner copies the entire fixture tree to an ignored path with spaces
 before restoring and building, so fixture outputs and logs are isolated.
 
 The Phase 3 ZIP intentionally contains the PCF payload but no producer package.
-XTB2005 warns about this incomplete package-inclusion feature. Phase 4 is not
-implemented by this fixture.
+XTB2005 warns about this incomplete package-inclusion feature. Discovery is
+verified; Phase 5 staging is not implemented.

@@ -11,18 +11,41 @@ nuget_cache="$repo_root/artifacts/nuget-cache"
 mkdir -p "$package_dir"
 NUGET_PACKAGES="$nuget_cache" dotnet pack "$repo_root/XrmTools.Build.csproj" --output "$package_dir" --verbosity quiet
 # Refresh only this locally authored package in the repository-local cache after repacking.
-rm -rf "$repo_root/artifacts/nuget-cache/xrmtools.build/0.2.0-phase3.1"
-unzip -Z1 "$package_dir/XrmTools.Build.0.2.0-phase3.1.nupkg" | grep -Fx "build/XrmTools.Build.props" >/dev/null
-unzip -Z1 "$package_dir/XrmTools.Build.0.2.0-phase3.1.nupkg" | grep -Fx "build/XrmTools.Build.targets" >/dev/null
-unzip -Z1 "$package_dir/XrmTools.Build.0.2.0-phase3.1.nupkg" | grep -Fx "build/targets/PluginPackageReferences.targets" >/dev/null
-unzip -Z1 "$package_dir/XrmTools.Build.0.2.0-phase3.1.nupkg" | grep -Fx "docs/architecture.md" >/dev/null
+python3 - "$repo_root" <<'PY'
+from pathlib import Path
+import shutil
+import sys
+import zipfile
+import xml.etree.ElementTree as ET
+
+root = Path(sys.argv[1])
+cache = root / "artifacts/nuget-cache/xrmtools.build/0.3.0-phase4.1"
+if cache.exists():
+    shutil.rmtree(cache)
+with zipfile.ZipFile(root / "artifacts/local-feed/XrmTools.Build.0.3.0-phase4.1.nupkg") as package:
+    required = {"build/XrmTools.Build.props", "build/XrmTools.Build.targets",
+                "build/targets/PluginPackageReferences.targets", "build/targets/PluginPackageArtifacts.targets",
+                "tools/netstandard2.0/XrmTools.Build.Tasks.dll", "tools/netstandard2.0/NuGet.Versioning.dll",
+                "docs/architecture.md", "docs/artifact-discovery.md", "licenses/NuGet.Versioning.txt"}
+    assert required <= set(package.namelist()), required - set(package.namelist())
+    assert not any(name.startswith(("lib/", "buildTransitive/")) for name in package.namelist())
+    assert not ET.fromstring(package.read("XrmTools.Build.nuspec")).findall(".//{*}dependency")
+PY
 
 NUGET_PACKAGES="$nuget_cache" dotnet build "$plugin_fixture" --verbosity minimal \
   -p:RestoreAdditionalProjectSources="$package_dir"
 NUGET_PACKAGES="$nuget_cache" dotnet msbuild "$plugin_fixture" -target:XrmToolsPrintConfiguration \
   -verbosity minimal -p:RestoreAdditionalProjectSources="$package_dir" | grep -F "XrmTools.Build imported" >/dev/null
 
-manifest_before="$(shasum -a 256 "$manifest" | cut -d ' ' -f 1)"
+manifest_hash() {
+  python3 - "$manifest" <<'PY'
+from pathlib import Path
+import hashlib
+import sys
+print(hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest())
+PY
+}
+manifest_before="$(manifest_hash)"
 solution_zip="$repo_root/tests/Fixtures/MinimalSolution/bin/Debug/MinimalSolution.zip"
 verify_zip_version() {
   local expected="$1"
@@ -86,7 +109,7 @@ if build_fixture -p:XrmToolsFixtureIncludeNbgv=false -p:XrmToolsUseNbgv=true >"$
 fi
 grep -Fq "XrmToolsUseNbgv is true, but Nerdbank.GitVersioning is not imported" "$repo_root/artifacts/missing-nbgv.log"
 
-manifest_after="$(shasum -a 256 "$manifest" | cut -d ' ' -f 1)"
+manifest_after="$(manifest_hash)"
 if [[ "$manifest_before" != "$manifest_after" ]]; then
   echo "Source-controlled Solution.xml was modified." >&2
   exit 1
@@ -95,5 +118,6 @@ fi
 NUGET_PACKAGES="$nuget_cache" dotnet msbuild "$fixture" -target:XrmToolsPrintConfiguration \
   -verbosity minimal -p:RestoreAdditionalProjectSources="$package_dir" | grep -F "XrmTools.Build imported" >/dev/null
 
-echo "Phase 1/2 fixture passed; local package: $package_dir/XrmTools.Build.0.2.0-phase3.1.nupkg"
+echo "Phase 1/2 fixture passed; local package: $package_dir/XrmTools.Build.0.3.0-phase4.1.nupkg"
 python3 "$repo_root/eng/test-targets.py"
+python3 "$repo_root/eng/test-artifacts.py"

@@ -2,23 +2,28 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <PackageId>XrmTools.Build</PackageId>
-    <Version>0.2.0-phase3.1</Version>
+    <Version>0.3.0-phase4.1</Version>
     <Authors>XrmTools</Authors>
     <Description>Optional MSBuild extensions for Microsoft Dataverse solution projects.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
-    <NoBuild>true</NoBuild>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="src/XrmTools.Build.Tasks/XrmTools.Build.Tasks.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
+    <None Include="src/XrmTools.Build.Tasks/bin/$(Configuration)/netstandard2.0/XrmTools.Build.Tasks.dll" Pack="true" PackagePath="tools/netstandard2.0/" />
+    <None Include="src/XrmTools.Build.Tasks/bin/$(Configuration)/netstandard2.0/NuGet.Versioning.dll" Pack="true" PackagePath="tools/netstandard2.0/" />
     <None Include="build/XrmTools.Build.props" Pack="true" PackagePath="build/" />
     <None Include="build/XrmTools.Build.targets" Pack="true" PackagePath="build/" />
     <None Include="build/targets/*.targets" Pack="true" PackagePath="build/targets/" />
     <None Include="README.md" Pack="true" PackagePath="/" />
     <None Include="LICENSE" Pack="true" PackagePath="licenses/" />
+    <None Include="licenses/NuGet.Versioning.txt" Pack="true" PackagePath="licenses/" />
     <None Include="docs/architecture.md" Pack="true" PackagePath="docs/" />
+    <None Include="docs/artifact-discovery.md" Pack="true" PackagePath="docs/" />
     <None Include="docs/adr/0001-additive-nuget-build-extension.md" Pack="true" PackagePath="docs/adr/" />
   </ItemGroup>
 </Project>

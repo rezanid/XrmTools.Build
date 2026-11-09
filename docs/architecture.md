@@ -82,8 +82,8 @@ or future Dataverse packaging support on macOS or Linux.
   are validated before any numeric conversion using normalized string bounds;
   overflowing inputs produce XTB1003 rather than a property-function exception.
   Unchanged staged versions skip XmlPoke entirely.
-- No assertion is made about plugin-package artifact discovery, final ZIP plugin
-  XML, or Dataverse upgrade support until those
+- No assertion is made about final ZIP plugin
+  XML or Dataverse upgrade support until those
   phases have independent fixtures and tests.
 
 ## Phase 3: explicit project-reference integration
@@ -125,11 +125,12 @@ project remains Microsoft's responsibility.
   producers, duplicate normalized paths, and duplicate explicit unique names
   (case-insensitive). Package-derived names/identities are deferred.
 - Normal Microsoft.Common/NuGet restore and dependency build scheduling remain
-  responsible for producers. The test producers record their own independent
-  NuGet versions, build exactly once, and reject any Pack invocation.
+  responsible for producers. Phase 3 originally rejected Pack in its test fixture.
+  Phase 4 adds explicit Pack/discovery processing described below, while retaining
+  independent producer versions and build-count assertions.
 - Before Microsoft's reference-output processing, `_XrmToolsFilterMicrosoftProjectOutputs`
   saves/removes only marked references and emits XTB2005: they are **not included**
-  as packages yet. Unmarked C# and PCF references still reach the Microsoft target.
+  in the solution ZIP yet. Unmarked C# and PCF references still reach the Microsoft target.
 - `_XrmToolsRestoreMicrosoftProjectReferences` restores the saved items and metadata
   after successful Microsoft processing. The existing resolver then stamps the
   staged solution before `PowerAppsPackage`; Microsoft still creates the ZIP and
@@ -171,7 +172,7 @@ They retain complete recursive NuGet restore graphs, diagnostic logs, and binlog
 under ignored `artifacts/`. Coverage includes 0/1/2 producers, both tested solution
 versions, arbitrary metadata, one producer without XrmTools.Build, distinct
 Debug/Release reference dimensions, unchanged producer versions, no duplicate
-build/Pack, and `BuildProjectReferences=false`. Direct output-target invocations
+build, and `BuildProjectReferences=false`. Direct output-target invocations
 also restore references. Negative tests cover invalid/missing/duplicate references
 and an unmarked reference sharing a marked producer's path.
 
@@ -182,6 +183,29 @@ ZIP inspection requires solution version 4.5.6.7 and the prefixed PCF manifest a
 bundle; source XML hashes are unchanged. Producer `.nupkg` inclusion is explicitly
 absent and warned about. It is not plugin XML/import validation.
 
+## Phase 4: exact artifact discovery
+
+See [artifact-discovery.md](artifact-discovery.md) for the investigated NuGet
+adapter behavior, execution order, producer-return and explicit-path contracts,
+compiled-task justification, diagnostic codes, freshness rules, and complete
+test matrix. Discovery processes classified items and private copies only; the
+Phase 3 ProjectReference adapter receives no additional mutations.
+
+Normal reference builds precede Pack. Multi-target producers require an outer
+build so all package TFMs exist, followed by Pack with NoBuild=true. Producer
+configuration/platform/AdditionalProperties and independent NuGet versions remain
+intact. A small netstandard2.0 task checks the exact ZIP's nuspec against expected
+NuGet identity/version, rather than trusting predicted filenames. The internal
+adapter fails closed on unchanged files to avoid accepting stale same-identity
+artifacts after custom nuspec changes; explicit contracts support intentional
+incremental reuse.
+
+The failure-recovery test covers both Microsoft solution versions. A deliberately
+failed reference-output target leaves marked references filtered in a reused
+failed project instance; a fresh invocation reevaluates complete references,
+builds successfully and discovers both packages. This remains a documented
+limitation, not an excuse to add more ProjectReference mutations.
+
 ## Prioritized implementation gates
 
 | Priority | Work | Acceptance evidence |
@@ -190,7 +214,8 @@ absent and warned about. It is not plugin XML/import validation.
 | 1 | Package `build/XrmTools.Build.props` and `.targets`; restore/import through real `PackageReference` in a minimal Microsoft `.cdsproj` | Locally packed `.nupkg`, generated NuGet imports, successful build or a clearly recorded platform blocker |
 | 2 | Resolve explicit > enabled NBGV > staged `Solution.xml`; validate a four-part numeric version and stamp only staged content | Fixture builds for all sources, invalid-version failure, ZIP version check, unchanged source file |
 | 3 | Classify explicit plugin references without replacing Microsoft targets or hiding normal C#/PCF references | Real mixed-reference builds/ZIPs, restore graph, metadata and build-count assertions; scoped-filter risks recorded above |
-| 4+ | Producer pack flow, artifact discovery and plugin metadata staging | Not started; deferred for the next acceptance gate |
+| 4 | Producer Pack, exact output discovery and validated fallbacks | Package-first artifact matrix, compiled-task validation and failed-instance recovery tests |
+| 5+ | Plugin metadata creation and solution staging | Not started; no producer packages copied into solution ZIPs |
 
 Phase 0 baseline ZIPs with plugin packages/PCF references cannot be captured because
 the repository has no such projects. The minimal fixture added for Phase 1 is the

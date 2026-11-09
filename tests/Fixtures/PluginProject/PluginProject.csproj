@@ -3,6 +3,6 @@
     <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="XrmTools.Build" Version="0.2.0-phase3.1" PrivateAssets="all" />
+    <PackageReference Include="XrmTools.Build" Version="0.3.0-phase4.1" PrivateAssets="all" />
   </ItemGroup>
 </Project>

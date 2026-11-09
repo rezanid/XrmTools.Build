@@ -23,21 +23,22 @@ FEED = ARTIFACTS / "local-feed"
 VERSION = ET.parse(ROOT / "XrmTools.Build.csproj").findtext("./PropertyGroup/Version")
 TARGETS = CACHE / "xrmtools.build" / VERSION / "build" / "XrmTools.Build.targets"
 ENV = {**os.environ, "NUGET_PACKAGES": str(CACHE)}
-RUN = Path(tempfile.mkdtemp(prefix="phase3 tests ", dir=ARTIFACTS))
+RUN = Path(tempfile.mkdtemp(prefix="integration tests ", dir=ARTIFACTS))
 
 
 def msbuild(project, *arguments, success=True, label="build"):
+    runner = [ENV["XRMTOOLS_MSBUILD_PATH"]] if ENV.get("XRMTOOLS_MSBUILD_PATH") else ["dotnet", "msbuild"]
     result = subprocess.run(
-        ["dotnet", "msbuild", str(project), "-nologo", "-v:minimal",
+        [*runner, str(project), "-nologo", "-v:minimal",
          f"-p:RestoreAdditionalProjectSources={FEED}", *arguments],
         cwd=project.parent, env=ENV, text=True, capture_output=True,
     )
     output = result.stdout + result.stderr
     log = RUN / f"{label}-{len(list(RUN.glob('*.log'))):03d}.log"
     log.write_text(output)
-    if success and result.returncode:
+    if success is True and result.returncode:
         raise AssertionError(f"MSBuild failed; see {log}\n" + "\n".join(output.splitlines()[-25:]))
-    if not success and result.returncode == 0:
+    if success is False and result.returncode == 0:
         raise AssertionError(f"MSBuild unexpectedly passed; see {log}")
     return output
 

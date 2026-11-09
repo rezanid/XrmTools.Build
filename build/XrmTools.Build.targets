@@ -1,5 +1,6 @@
 <Project>
   <Import Project="targets/PluginPackageReferences.targets" />
+  <Import Project="targets/PluginPackageArtifacts.targets" />
 
   <Target Name="XrmToolsPrintConfiguration">
     <Message Importance="High"

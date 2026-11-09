@@ -11,13 +11,12 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
     <PackageReference Include="Microsoft.PowerApps.MSBuild.Solution" Version="$(FixtureMicrosoftVersion)" />
-    <PackageReference Include="XrmTools.Build" Version="0.2.0-phase3.1" PrivateAssets="all" />
+    <PackageReference Include="XrmTools.Build" Version="0.3.0-phase4.1" PrivateAssets="all" />
     <ProjectReference Include="ProducerA/ProducerA.csproj" ReferenceOutputAssembly="false"
                       Condition="'$(FixtureProducerCount)' != '0'">
       <XrmToolsPluginPackage>true</XrmToolsPluginPackage>
       <XrmToolsPluginPackageUniqueName>xt_ProducerA</XrmToolsPluginPackageUniqueName>
       <ManagedIdentityId>1a71c21a-cd2e-40f0-8a91-a31608d19900</ManagedIdentityId>
-      <XrmToolsPluginPackagePath>custom packages/producer-a.nupkg</XrmToolsPluginPackagePath>
       <AdditionalProperties>FixtureDimension=A</AdditionalProperties>
       <FixtureUnknownMetadata>preserve me</FixtureUnknownMetadata>
     </ProjectReference>
@@ -43,7 +42,7 @@
           DependsOnTargets="_XrmToolsRestoreMicrosoftProjectReferences">
     <Error Condition="'@(ProjectReference->Count())' != '$([MSBuild]::Add($(FixtureProducerCount), 2))'"
            Text="Fixture: references were not restored after Microsoft's output-processing target." />
-    <Error Condition="'%(ProjectReference.XrmToolsPluginPackageUniqueName)' == 'xt_ProducerA' and ('%(ProjectReference.FixtureUnknownMetadata)' != 'preserve me' or '%(ProjectReference.ManagedIdentityId)' != '1a71c21a-cd2e-40f0-8a91-a31608d19900' or '%(ProjectReference.AdditionalProperties)' != 'FixtureDimension=A' or '%(ProjectReference.XrmToolsPluginPackagePath)' != 'custom packages/producer-a.nupkg')"
+    <Error Condition="'%(ProjectReference.XrmToolsPluginPackageUniqueName)' == 'xt_ProducerA' and ('%(ProjectReference.FixtureUnknownMetadata)' != 'preserve me' or '%(ProjectReference.ManagedIdentityId)' != '1a71c21a-cd2e-40f0-8a91-a31608d19900' or '%(ProjectReference.AdditionalProperties)' != 'FixtureDimension=A')"
            Text="Fixture: producer reference metadata was not preserved." />
   </Target>
 
