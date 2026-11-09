@@ -10,14 +10,17 @@ nuget_cache="$repo_root/artifacts/nuget-cache"
 
 mkdir -p "$package_dir"
 NUGET_PACKAGES="$nuget_cache" dotnet pack "$repo_root/XrmTools.Build.csproj" --output "$package_dir" --verbosity quiet
-unzip -Z1 "$package_dir/XrmTools.Build.0.1.3.nupkg" | grep -Fxq "build/XrmTools.Build.props"
-unzip -Z1 "$package_dir/XrmTools.Build.0.1.3.nupkg" | grep -Fxq "build/XrmTools.Build.targets"
-unzip -Z1 "$package_dir/XrmTools.Build.0.1.3.nupkg" | grep -Fxq "docs/architecture.md"
+# Refresh only this locally authored package in the repository-local cache after repacking.
+rm -rf "$repo_root/artifacts/nuget-cache/xrmtools.build/0.2.0-phase3.1"
+unzip -Z1 "$package_dir/XrmTools.Build.0.2.0-phase3.1.nupkg" | grep -Fx "build/XrmTools.Build.props" >/dev/null
+unzip -Z1 "$package_dir/XrmTools.Build.0.2.0-phase3.1.nupkg" | grep -Fx "build/XrmTools.Build.targets" >/dev/null
+unzip -Z1 "$package_dir/XrmTools.Build.0.2.0-phase3.1.nupkg" | grep -Fx "build/targets/PluginPackageReferences.targets" >/dev/null
+unzip -Z1 "$package_dir/XrmTools.Build.0.2.0-phase3.1.nupkg" | grep -Fx "docs/architecture.md" >/dev/null
 
 NUGET_PACKAGES="$nuget_cache" dotnet build "$plugin_fixture" --verbosity minimal \
   -p:RestoreAdditionalProjectSources="$package_dir"
 NUGET_PACKAGES="$nuget_cache" dotnet msbuild "$plugin_fixture" -target:XrmToolsPrintConfiguration \
-  -verbosity minimal -p:RestoreAdditionalProjectSources="$package_dir" | grep -Fq "XrmTools.Build imported"
+  -verbosity minimal -p:RestoreAdditionalProjectSources="$package_dir" | grep -F "XrmTools.Build imported" >/dev/null
 
 manifest_before="$(shasum -a 256 "$manifest" | cut -d ' ' -f 1)"
 solution_zip="$repo_root/tests/Fixtures/MinimalSolution/bin/Debug/MinimalSolution.zip"
@@ -49,15 +52,18 @@ build_fixture() {
 
 # Explicit override wins even when NBGV is present and enabled.
 build_fixture -p:XrmToolsFixtureIncludeNbgv=true -p:XrmToolsUseNbgv=true \
-  -p:XrmToolsSolutionVersion=4.5.6.7 -bl:"$repo_root/artifacts/phase1-2.binlog"
+  -p:XrmToolsSolutionVersion=4.5.6.7 -p:XrmToolsFixtureCheckStamp=Changed -bl:"$repo_root/artifacts/phase1-2.binlog"
 verify_zip_version 4.5.6.7
 
 # NBGV is used only when the solution project explicitly opts in.
 build_fixture -p:XrmToolsFixtureIncludeNbgv=true -p:XrmToolsUseNbgv=true
-verify_zip_version 7.8.9.0
+nbgv_version="$(NUGET_PACKAGES="$nuget_cache" dotnet msbuild "$fixture" \
+  -target:PrintFixtureNbgvVersion -verbosity:minimal -p:XrmToolsFixtureIncludeNbgv=true \
+  | sed -n 's/.*Fixture NBGV BuildVersion=//p' | tr -d '\r')"
+verify_zip_version "$nbgv_version"
 
 # Without opt-in, the staged manifest remains the version source.
-build_fixture -p:XrmToolsFixtureIncludeNbgv=false -p:XrmToolsUseNbgv=false
+build_fixture -p:XrmToolsFixtureIncludeNbgv=false -p:XrmToolsUseNbgv=false -p:XrmToolsFixtureCheckStamp=Unchanged
 verify_zip_version 1.2.3.4
 
 # Invalid values and an enabled-but-missing NBGV package must fail clearly.
@@ -71,7 +77,8 @@ if build_fixture -p:XrmToolsSolutionVersion=2147483648.0.0.0 >"$repo_root/artifa
   echo "Overflowing solution version unexpectedly succeeded." >&2
   exit 1
 fi
-grep -Fq "too large or too small for an Int32" "$repo_root/artifacts/overflow-version.log"
+grep -Fq "XTB1003" "$repo_root/artifacts/overflow-version.log"
+grep -Fq "outside the supported range 0..2147483647" "$repo_root/artifacts/overflow-version.log"
 
 if build_fixture -p:XrmToolsFixtureIncludeNbgv=false -p:XrmToolsUseNbgv=true >"$repo_root/artifacts/missing-nbgv.log" 2>&1; then
   echo "XrmToolsUseNbgv unexpectedly succeeded without NBGV." >&2
@@ -86,6 +93,7 @@ if [[ "$manifest_before" != "$manifest_after" ]]; then
 fi
 
 NUGET_PACKAGES="$nuget_cache" dotnet msbuild "$fixture" -target:XrmToolsPrintConfiguration \
-  -verbosity minimal -p:RestoreAdditionalProjectSources="$package_dir" | grep -Fq "XrmTools.Build imported"
+  -verbosity minimal -p:RestoreAdditionalProjectSources="$package_dir" | grep -F "XrmTools.Build imported" >/dev/null
 
-echo "Phase 1/2 fixture passed; local package: $package_dir/XrmTools.Build.0.1.3.nupkg"
+echo "Phase 1/2 fixture passed; local package: $package_dir/XrmTools.Build.0.2.0-phase3.1.nupkg"
+python3 "$repo_root/eng/test-targets.py"

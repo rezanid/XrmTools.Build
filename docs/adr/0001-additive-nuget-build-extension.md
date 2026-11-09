@@ -30,6 +30,25 @@ solution files. NBGV is opt-in per solution project. Plugin project build versio
 and artifact handling are separate follow-on work and must not inherit the
 Dataverse solution version as NuGet `PackageVersion`, `Version`, or `FileVersion`.
 
+### Phase 3 refinement: scoped reference-output adapter
+
+Microsoft's `ProcessCdsProjectReferencesOutputs` calls `GetProjectOutputPath` on
+every ProjectReference, ignoring the package marker and ReferenceOutputAssembly.
+The extension therefore classifies explicit `XrmToolsPluginPackage=true`
+references, preserving metadata and returning them through a public MSBuild
+Returns contract. It temporarily filters only these references at Microsoft's
+reference-output target boundary and restores them after successful processing.
+Normal restore/reference builds retain the references; there is no replacement
+Microsoft target, producer-target injection, or additional build/Pack call.
+
+This decision is verified against solution packages 2.13.1 and 2.14.1, including
+real PCF reference processing, but remains a version-sensitive adapter. Third-party
+hooks can observe the transient list, restored marked items are appended, and a
+failed Microsoft target skips restoration in that failed instance. Those risks
+and untested IDE/static-graph scenarios are documented in the architecture note.
+Phase 3 emits an explicit warning that recognized producer packages are not yet
+packed/included; artifact discovery and staging remain later phases.
+
 ## Consequences
 
 - Direct `PackageReference` import, build ordering, and package contents must be

@@ -10,5 +10,6 @@
       <CustomizationPrefix>xt</CustomizationPrefix>
     </Publisher>
     <Managed>0</Managed>
+    <RootComponents />
   </SolutionManifest>
 </ImportExportXml>

@@ -1,7 +1,33 @@
 <Project>
+  <Import Project="targets/PluginPackageReferences.targets" />
+
   <Target Name="XrmToolsPrintConfiguration">
     <Message Importance="High"
              Text="XrmTools.Build imported by $(MSBuildProjectFullPath); solution version override='$(XrmToolsSolutionVersion)', NBGV opt-in='$(XrmToolsUseNbgv)'." />
+  </Target>
+
+  <Target Name="_XrmToolsCheckStagedManifest" AfterTargets="CopyCdsSolutionContent"
+          Condition="'$(MSBuildProjectExtension)' == '.cdsproj'">
+    <Error Code="XTB1002" Condition="!Exists('$(SolutionPackagerMetadataWorkingDirectory)/Other/Solution.xml')"
+           Text="XrmTools.Build: Microsoft staging did not produce '$(SolutionPackagerMetadataWorkingDirectory)/Other/Solution.xml'. Confirm SolutionRootPath contains Other/Solution.xml and the restored packaging targets use the expected staging contract." />
+  </Target>
+
+  <Target Name="_XrmToolsCheckSolutionTooling"
+          BeforeTargets="PrepareForBuild"
+          Condition="'$(MSBuildProjectExtension)' == '.cdsproj'">
+    <Error Code="XTB1000" Condition="'$(SolutionPackagerMetadataWorkingDirectory)' == ''"
+           Text="XrmTools.Build: Microsoft's solution packaging targets have not supplied SolutionPackagerMetadataWorkingDirectory for $(MSBuildProjectFullPath). Restore a Microsoft.PowerApps.MSBuild.Solution PackageReference with build assets enabled. XrmTools.Build requires CopyCdsSolutionContent, ProcessCdsProjectReferencesOutputs and PowerAppsPackage; it does not replace them." />
+    <Message Importance="Low"
+             Text="XrmTools.Build requires Microsoft's CopyCdsSolutionContent, ProcessCdsProjectReferencesOutputs and PowerAppsPackage targets; staging directory: $(SolutionPackagerMetadataWorkingDirectory). If a target is missing, verify the restored Microsoft.PowerApps.MSBuild.Solution build assets." />
+    <Warning Code="XTB1001" Condition="'$(SolutionVersionStrategy)' != ''"
+             Text="XrmTools.Build: Microsoft's SolutionVersionStrategy is also enabled. XrmTools.Build resolves and stamps the final staged solution version after Microsoft's reference processing; remove SolutionVersionStrategy if this is not intended." />
+    <PropertyGroup>
+      <_XrmToolsStagedManifestPath>$([System.IO.Path]::GetFullPath('$(SolutionPackagerMetadataWorkingDirectory)/Other/Solution.xml'))</_XrmToolsStagedManifestPath>
+      <_XrmToolsSourceManifestPath>$([System.IO.Path]::GetFullPath('$(SolutionRootPath)/Other/Solution.xml'))</_XrmToolsSourceManifestPath>
+    </PropertyGroup>
+    <Error Code="XTB1000"
+           Condition="$([System.String]::Equals('$(_XrmToolsStagedManifestPath)', '$(_XrmToolsSourceManifestPath)', System.StringComparison.OrdinalIgnoreCase))"
+           Text="XrmTools.Build: SolutionPackagerMetadataWorkingDirectory points at the source Solution.xml. Configure a separate intermediate staging directory; source stamping is not supported." />
   </Target>
 
   <Target Name="_XrmToolsValidateNbgv"
@@ -22,7 +48,7 @@
 
   <Target Name="XrmToolsResolveSolutionVersion"
           BeforeTargets="PowerAppsPackage"
-          DependsOnTargets="CopyCdsSolutionContent;ProcessCdsProjectReferencesOutputs;_XrmToolsResolveNbgvSolutionVersion"
+          DependsOnTargets="_XrmToolsCheckSolutionTooling;CopyCdsSolutionContent;ProcessCdsProjectReferencesOutputs;_XrmToolsResolveNbgvSolutionVersion"
           Condition="'$(MSBuildProjectExtension)' == '.cdsproj'">
     <PropertyGroup>
       <_XrmToolsSolutionXml>$(SolutionPackagerMetadataWorkingDirectory)/Other/Solution.xml</_XrmToolsSolutionXml>
@@ -31,28 +57,43 @@
 
     <XmlPeek XmlInputPath="$(_XrmToolsSolutionXml)"
              Query="/ImportExportXml/SolutionManifest/Version/text()"
-             Condition="'$(_XrmToolsResolvedSolutionVersion)' == '' and '$(XrmToolsUseNbgv)' != 'true' and Exists('$(_XrmToolsSolutionXml)')">
+             Condition="Exists('$(_XrmToolsSolutionXml)')">
       <Output TaskParameter="Result" PropertyName="_XrmToolsManifestSolutionVersion" />
     </XmlPeek>
-    <Error Condition="!Exists('$(_XrmToolsSolutionXml)')"
+    <Error Code="XTB1002" Condition="!Exists('$(_XrmToolsSolutionXml)')"
            Text="XrmTools.Build: staged solution manifest not found at '$(_XrmToolsSolutionXml)'. Confirm SolutionRootPath contains Other/Solution.xml." />
+    <XmlPeek XmlInputPath="$(_XrmToolsSolutionXml)" Query="/ImportExportXml/SolutionManifest/Version">
+      <Output TaskParameter="Result" ItemName="_XrmToolsManifestVersionNode" />
+    </XmlPeek>
+    <Error Code="XTB1002" Condition="'@(_XrmToolsManifestVersionNode->Count())' != '1'"
+           Text="XrmTools.Build: '$(_XrmToolsSolutionXml)' must contain exactly one SolutionManifest/Version element." />
     <PropertyGroup>
       <_XrmToolsResolvedSolutionVersion Condition="'$(_XrmToolsResolvedSolutionVersion)' == ''">$(_XrmToolsManifestSolutionVersion)</_XrmToolsResolvedSolutionVersion>
-      <_XrmToolsSolutionVersionShapeValid>$([System.Text.RegularExpressions.Regex]::IsMatch('$(_XrmToolsResolvedSolutionVersion)', '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'))</_XrmToolsSolutionVersionShapeValid>
+      <_XrmToolsSolutionVersionShapeValid>$([System.Text.RegularExpressions.Regex]::IsMatch('$(_XrmToolsResolvedSolutionVersion)', '\A[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\z'))</_XrmToolsSolutionVersionShapeValid>
     </PropertyGroup>
-    <Error Condition="'$(_XrmToolsResolvedSolutionVersion)' == ''"
+    <Error Code="XTB1003" Condition="'$(_XrmToolsResolvedSolutionVersion)' == ''"
            Text="XrmTools.Build: no solution version was resolved. Set XrmToolsSolutionVersion, opt in to an imported NBGV package with XrmToolsUseNbgv=true, or provide a version in Other/Solution.xml." />
-    <Error Condition="'$(_XrmToolsSolutionVersionShapeValid)' != 'True'"
+    <Error Code="XTB1003" Condition="'$(_XrmToolsSolutionVersionShapeValid)' != 'True'"
            Text="XrmTools.Build: solution version '$(_XrmToolsResolvedSolutionVersion)' must contain exactly four nonnegative numeric components (Major.Minor.Build.Revision)." />
-    <PropertyGroup Condition="'$(_XrmToolsSolutionVersionShapeValid)' == 'True'">
-      <_XrmToolsParsedSolutionVersion>$([System.Version]::Parse('$(_XrmToolsResolvedSolutionVersion)'))</_XrmToolsParsedSolutionVersion>
+
+    <ItemGroup>
+      <_XrmToolsVersionComponent Include="$(_XrmToolsResolvedSolutionVersion.Split('.'))" />
+      <_XrmToolsVersionComponent Update="@(_XrmToolsVersionComponent)">
+        <Numeric>$([System.Text.RegularExpressions.Regex]::Replace('%(_XrmToolsVersionComponent.Identity)', '\A0+', ''))</Numeric>
+      </_XrmToolsVersionComponent>
+    </ItemGroup>
+    <!-- Compare normalized decimal strings before any numeric conversion, including arbitrarily large inputs. -->
+    <Error Code="XTB1003"
+           Condition="$([System.String]::Copy('%(_XrmToolsVersionComponent.Numeric)').Length) &gt; 10 or ($([System.String]::Copy('%(_XrmToolsVersionComponent.Numeric)').Length) == 10 and $([System.String]::CompareOrdinal('%(_XrmToolsVersionComponent.Numeric)', '2147483647')) &gt; 0)"
+           Text="XrmTools.Build: solution version '$(_XrmToolsResolvedSolutionVersion)' has component '%(_XrmToolsVersionComponent.Identity)' outside the supported range 0..2147483647. Supply four nonnegative 32-bit components." />
+    <PropertyGroup>
       <XrmToolsResolvedSolutionVersion>$(_XrmToolsResolvedSolutionVersion)</XrmToolsResolvedSolutionVersion>
     </PropertyGroup>
 
     <XmlPoke XmlInputPath="$(_XrmToolsSolutionXml)"
              Query="/ImportExportXml/SolutionManifest/Version"
              Value="$(_XrmToolsResolvedSolutionVersion)"
-             Condition="'$(_XrmToolsSolutionVersionShapeValid)' == 'True'" />
+             Condition="'$(_XrmToolsManifestSolutionVersion)' != '$(_XrmToolsResolvedSolutionVersion)'" />
 
     <Message Importance="High"
              Text="XrmTools.Build resolved Dataverse solution version $(_XrmToolsResolvedSolutionVersion) for $(MSBuildProjectName); XrmToolsResolvedSolutionVersion=$(XrmToolsResolvedSolutionVersion)." />

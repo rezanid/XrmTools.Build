@@ -1,0 +1,51 @@
+<Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)/$(MSBuildToolsVersion)/Microsoft.Common.props" />
+  <PropertyGroup>
+    <TargetFrameworkVersion>v4.6.2</TargetFrameworkVersion>
+    <TargetFramework>net462</TargetFramework>
+    <RestoreProjectStyle>PackageReference</RestoreProjectStyle>
+    <SolutionRootPath>../MinimalSolution/src</SolutionRootPath>
+    <FixtureMicrosoftVersion Condition="'$(FixtureMicrosoftVersion)' == ''">2.14.1</FixtureMicrosoftVersion>
+    <FixtureProducerCount Condition="'$(FixtureProducerCount)' == ''">2</FixtureProducerCount>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.PowerApps.MSBuild.Solution" Version="$(FixtureMicrosoftVersion)" />
+    <PackageReference Include="XrmTools.Build" Version="0.2.0-phase3.1" PrivateAssets="all" />
+    <ProjectReference Include="ProducerA/ProducerA.csproj" ReferenceOutputAssembly="false"
+                      Condition="'$(FixtureProducerCount)' != '0'">
+      <XrmToolsPluginPackage>true</XrmToolsPluginPackage>
+      <XrmToolsPluginPackageUniqueName>xt_ProducerA</XrmToolsPluginPackageUniqueName>
+      <ManagedIdentityId>1a71c21a-cd2e-40f0-8a91-a31608d19900</ManagedIdentityId>
+      <XrmToolsPluginPackagePath>custom packages/producer-a.nupkg</XrmToolsPluginPackagePath>
+      <AdditionalProperties>FixtureDimension=A</AdditionalProperties>
+      <FixtureUnknownMetadata>preserve me</FixtureUnknownMetadata>
+    </ProjectReference>
+    <ProjectReference Include="ProducerB/ProducerB.csproj" ReferenceOutputAssembly="false"
+                      Condition="'$(FixtureProducerCount)' == '2'">
+      <XrmToolsPluginPackage>true</XrmToolsPluginPackage>
+      <XrmToolsPluginPackageUniqueName>xt_ProducerB</XrmToolsPluginPackageUniqueName>
+      <AdditionalProperties>Configuration=Release;FixtureDimension=B</AdditionalProperties>
+    </ProjectReference>
+    <ProjectReference Include="Ordinary/Ordinary.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="Control/Control.pcfproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <Target Name="VerifyFixtureReferenceBoundaryBefore" BeforeTargets="ProcessCdsProjectReferencesOutputs"
+          DependsOnTargets="_XrmToolsFilterMicrosoftProjectOutputs">
+    <Error Condition="'%(ProjectReference.XrmToolsPluginPackage)' == 'true'"
+           Text="Fixture: marked producer reached Microsoft's GetProjectOutputPath call." />
+    <Error Condition="'@(ProjectReference->Count())' != '2'"
+           Text="Fixture: unmarked references were removed from the Microsoft boundary." />
+  </Target>
+
+  <Target Name="VerifyFixtureReferenceBoundaryAfter" AfterTargets="ProcessCdsProjectReferencesOutputs"
+          DependsOnTargets="_XrmToolsRestoreMicrosoftProjectReferences">
+    <Error Condition="'@(ProjectReference->Count())' != '$([MSBuild]::Add($(FixtureProducerCount), 2))'"
+           Text="Fixture: references were not restored after Microsoft's output-processing target." />
+    <Error Condition="'%(ProjectReference.XrmToolsPluginPackageUniqueName)' == 'xt_ProducerA' and ('%(ProjectReference.FixtureUnknownMetadata)' != 'preserve me' or '%(ProjectReference.ManagedIdentityId)' != '1a71c21a-cd2e-40f0-8a91-a31608d19900' or '%(ProjectReference.AdditionalProperties)' != 'FixtureDimension=A' or '%(ProjectReference.XrmToolsPluginPackagePath)' != 'custom packages/producer-a.nupkg')"
+           Text="Fixture: producer reference metadata was not preserved." />
+  </Target>
+
+  <Import Project="$(MSBuildToolsPath)/Microsoft.Common.targets" />
+</Project>
