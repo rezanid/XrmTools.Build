@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <PackageId>XrmTools.Build</PackageId>
+    <Version>0.1.3</Version>
+    <Authors>XrmTools</Authors>
+    <Description>Optional MSBuild extensions for Microsoft Dataverse solution projects.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <NoBuild>true</NoBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="build/XrmTools.Build.props" Pack="true" PackagePath="build/" />
+    <None Include="build/XrmTools.Build.targets" Pack="true" PackagePath="build/" />
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <None Include="LICENSE" Pack="true" PackagePath="licenses/" />
+    <None Include="docs/architecture.md" Pack="true" PackagePath="docs/" />
+    <None Include="docs/adr/0001-additive-nuget-build-extension.md" Pack="true" PackagePath="docs/adr/" />
+  </ItemGroup>
+</Project>

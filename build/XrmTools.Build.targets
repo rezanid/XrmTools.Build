@@ -1,0 +1,60 @@
+<Project>
+  <Target Name="XrmToolsPrintConfiguration">
+    <Message Importance="High"
+             Text="XrmTools.Build imported by $(MSBuildProjectFullPath); solution version override='$(XrmToolsSolutionVersion)', NBGV opt-in='$(XrmToolsUseNbgv)'." />
+  </Target>
+
+  <Target Name="_XrmToolsValidateNbgv"
+          Condition="'$(XrmToolsUseNbgv)' == 'true' and '$(XrmToolsSolutionVersion)' == ''">
+    <Error Condition="'$(NerdbankGitVersioningTasksPath)' == '' or !Exists('$(NerdbankGitVersioningTasksPath)Nerdbank.GitVersioning.Tasks.dll')"
+           Text="XrmTools.Build: XrmToolsUseNbgv is true, but Nerdbank.GitVersioning is not imported by this .cdsproj. Add a Nerdbank.GitVersioning PackageReference to this project, or set XrmToolsSolutionVersion explicitly." />
+  </Target>
+
+  <Target Name="_XrmToolsResolveNbgvSolutionVersion"
+          DependsOnTargets="_XrmToolsValidateNbgv;GetBuildVersion"
+          Condition="'$(XrmToolsUseNbgv)' == 'true' and '$(XrmToolsSolutionVersion)' == ''">
+    <PropertyGroup>
+      <_XrmToolsResolvedSolutionVersion>$(BuildVersion)</_XrmToolsResolvedSolutionVersion>
+    </PropertyGroup>
+    <Error Condition="'$(_XrmToolsResolvedSolutionVersion)' == ''"
+           Text="XrmTools.Build: NBGV GetBuildVersion returned an empty BuildVersion for $(MSBuildProjectFullPath)." />
+  </Target>
+
+  <Target Name="XrmToolsResolveSolutionVersion"
+          BeforeTargets="PowerAppsPackage"
+          DependsOnTargets="CopyCdsSolutionContent;ProcessCdsProjectReferencesOutputs;_XrmToolsResolveNbgvSolutionVersion"
+          Condition="'$(MSBuildProjectExtension)' == '.cdsproj'">
+    <PropertyGroup>
+      <_XrmToolsSolutionXml>$(SolutionPackagerMetadataWorkingDirectory)/Other/Solution.xml</_XrmToolsSolutionXml>
+      <_XrmToolsResolvedSolutionVersion Condition="'$(XrmToolsSolutionVersion)' != ''">$(XrmToolsSolutionVersion)</_XrmToolsResolvedSolutionVersion>
+    </PropertyGroup>
+
+    <XmlPeek XmlInputPath="$(_XrmToolsSolutionXml)"
+             Query="/ImportExportXml/SolutionManifest/Version/text()"
+             Condition="'$(_XrmToolsResolvedSolutionVersion)' == '' and '$(XrmToolsUseNbgv)' != 'true' and Exists('$(_XrmToolsSolutionXml)')">
+      <Output TaskParameter="Result" PropertyName="_XrmToolsManifestSolutionVersion" />
+    </XmlPeek>
+    <Error Condition="!Exists('$(_XrmToolsSolutionXml)')"
+           Text="XrmTools.Build: staged solution manifest not found at '$(_XrmToolsSolutionXml)'. Confirm SolutionRootPath contains Other/Solution.xml." />
+    <PropertyGroup>
+      <_XrmToolsResolvedSolutionVersion Condition="'$(_XrmToolsResolvedSolutionVersion)' == ''">$(_XrmToolsManifestSolutionVersion)</_XrmToolsResolvedSolutionVersion>
+      <_XrmToolsSolutionVersionShapeValid>$([System.Text.RegularExpressions.Regex]::IsMatch('$(_XrmToolsResolvedSolutionVersion)', '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'))</_XrmToolsSolutionVersionShapeValid>
+    </PropertyGroup>
+    <Error Condition="'$(_XrmToolsResolvedSolutionVersion)' == ''"
+           Text="XrmTools.Build: no solution version was resolved. Set XrmToolsSolutionVersion, opt in to an imported NBGV package with XrmToolsUseNbgv=true, or provide a version in Other/Solution.xml." />
+    <Error Condition="'$(_XrmToolsSolutionVersionShapeValid)' != 'True'"
+           Text="XrmTools.Build: solution version '$(_XrmToolsResolvedSolutionVersion)' must contain exactly four nonnegative numeric components (Major.Minor.Build.Revision)." />
+    <PropertyGroup Condition="'$(_XrmToolsSolutionVersionShapeValid)' == 'True'">
+      <_XrmToolsParsedSolutionVersion>$([System.Version]::Parse('$(_XrmToolsResolvedSolutionVersion)'))</_XrmToolsParsedSolutionVersion>
+      <XrmToolsResolvedSolutionVersion>$(_XrmToolsResolvedSolutionVersion)</XrmToolsResolvedSolutionVersion>
+    </PropertyGroup>
+
+    <XmlPoke XmlInputPath="$(_XrmToolsSolutionXml)"
+             Query="/ImportExportXml/SolutionManifest/Version"
+             Value="$(_XrmToolsResolvedSolutionVersion)"
+             Condition="'$(_XrmToolsSolutionVersionShapeValid)' == 'True'" />
+
+    <Message Importance="High"
+             Text="XrmTools.Build resolved Dataverse solution version $(_XrmToolsResolvedSolutionVersion) for $(MSBuildProjectName); XrmToolsResolvedSolutionVersion=$(XrmToolsResolvedSolutionVersion)." />
+  </Target>
+</Project>

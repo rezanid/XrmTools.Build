@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+package_dir="$repo_root/artifacts/local-feed"
+fixture="$repo_root/tests/Fixtures/MinimalSolution/MinimalSolution.cdsproj"
+plugin_fixture="$repo_root/tests/Fixtures/PluginProject/PluginProject.csproj"
+manifest="$repo_root/tests/Fixtures/MinimalSolution/src/Other/Solution.xml"
+nuget_cache="$repo_root/artifacts/nuget-cache"
+
+mkdir -p "$package_dir"
+NUGET_PACKAGES="$nuget_cache" dotnet pack "$repo_root/XrmTools.Build.csproj" --output "$package_dir" --verbosity quiet
+unzip -Z1 "$package_dir/XrmTools.Build.0.1.3.nupkg" | grep -Fxq "build/XrmTools.Build.props"
+unzip -Z1 "$package_dir/XrmTools.Build.0.1.3.nupkg" | grep -Fxq "build/XrmTools.Build.targets"
+unzip -Z1 "$package_dir/XrmTools.Build.0.1.3.nupkg" | grep -Fxq "docs/architecture.md"
+
+NUGET_PACKAGES="$nuget_cache" dotnet build "$plugin_fixture" --verbosity minimal \
+  -p:RestoreAdditionalProjectSources="$package_dir"
+NUGET_PACKAGES="$nuget_cache" dotnet msbuild "$plugin_fixture" -target:XrmToolsPrintConfiguration \
+  -verbosity minimal -p:RestoreAdditionalProjectSources="$package_dir" | grep -Fq "XrmTools.Build imported"
+
+manifest_before="$(shasum -a 256 "$manifest" | cut -d ' ' -f 1)"
+solution_zip="$repo_root/tests/Fixtures/MinimalSolution/bin/Debug/MinimalSolution.zip"
+verify_zip_version() {
+  local expected="$1"
+  python3 - "$solution_zip" "$expected" <<'PY'
+import sys
+import zipfile
+import xml.etree.ElementTree as ET
+
+zip_path = sys.argv[1]
+expected_version = sys.argv[2]
+with zipfile.ZipFile(zip_path) as archive:
+    solution_files = [name for name in archive.namelist() if name.lower() == "solution.xml"]
+    if len(solution_files) != 1:
+        raise SystemExit(f"Expected one Solution.xml in {zip_path}, found {solution_files}")
+    root = ET.fromstring(archive.read(solution_files[0]))
+    version = root.findtext("./SolutionManifest/Version")
+    if version != expected_version:
+        raise SystemExit(f"Expected staged solution version {expected_version}, got {version!r}")
+print(f"Verified final Microsoft-generated ZIP contains solution version {version}.")
+PY
+}
+
+build_fixture() {
+  NUGET_PACKAGES="$nuget_cache" dotnet build "$fixture" --verbosity minimal \
+    -p:RestoreAdditionalProjectSources="$package_dir" "$@"
+}
+
+# Explicit override wins even when NBGV is present and enabled.
+build_fixture -p:XrmToolsFixtureIncludeNbgv=true -p:XrmToolsUseNbgv=true \
+  -p:XrmToolsSolutionVersion=4.5.6.7 -bl:"$repo_root/artifacts/phase1-2.binlog"
+verify_zip_version 4.5.6.7
+
+# NBGV is used only when the solution project explicitly opts in.
+build_fixture -p:XrmToolsFixtureIncludeNbgv=true -p:XrmToolsUseNbgv=true
+verify_zip_version 7.8.9.0
+
+# Without opt-in, the staged manifest remains the version source.
+build_fixture -p:XrmToolsFixtureIncludeNbgv=false -p:XrmToolsUseNbgv=false
+verify_zip_version 1.2.3.4
+
+# Invalid values and an enabled-but-missing NBGV package must fail clearly.
+if build_fixture -p:XrmToolsSolutionVersion=1.2.3-beta >"$repo_root/artifacts/invalid-version.log" 2>&1; then
+  echo "Invalid solution version unexpectedly succeeded." >&2
+  exit 1
+fi
+grep -Fq "must contain exactly four nonnegative numeric components" "$repo_root/artifacts/invalid-version.log"
+
+if build_fixture -p:XrmToolsSolutionVersion=2147483648.0.0.0 >"$repo_root/artifacts/overflow-version.log" 2>&1; then
+  echo "Overflowing solution version unexpectedly succeeded." >&2
+  exit 1
+fi
+grep -Fq "too large or too small for an Int32" "$repo_root/artifacts/overflow-version.log"
+
+if build_fixture -p:XrmToolsFixtureIncludeNbgv=false -p:XrmToolsUseNbgv=true >"$repo_root/artifacts/missing-nbgv.log" 2>&1; then
+  echo "XrmToolsUseNbgv unexpectedly succeeded without NBGV." >&2
+  exit 1
+fi
+grep -Fq "XrmToolsUseNbgv is true, but Nerdbank.GitVersioning is not imported" "$repo_root/artifacts/missing-nbgv.log"
+
+manifest_after="$(shasum -a 256 "$manifest" | cut -d ' ' -f 1)"
+if [[ "$manifest_before" != "$manifest_after" ]]; then
+  echo "Source-controlled Solution.xml was modified." >&2
+  exit 1
+fi
+
+NUGET_PACKAGES="$nuget_cache" dotnet msbuild "$fixture" -target:XrmToolsPrintConfiguration \
+  -verbosity minimal -p:RestoreAdditionalProjectSources="$package_dir" | grep -Fq "XrmTools.Build imported"
+
+echo "Phase 1/2 fixture passed; local package: $package_dir/XrmTools.Build.0.1.3.nupkg"
