@@ -68,10 +68,12 @@ or future Dataverse packaging support on macOS or Linux.
   It does not select or replace the Microsoft solution package.
 - Validation passed on the installed .NET SDK 10.0.403 / MSBuild 18.9.15
   on macOS arm64 with Microsoft solution packages 2.14.1 and 2.13.1 and the real
-  Microsoft PCF targets from package 2.14.1.
+  Microsoft PCF targets from package 2.14.1. Phase 4's package-first regression
+  also passed in hosted Windows and macOS dotnet CI; the linked evidence and
+  exact scope are recorded in [artifact discovery](artifact-discovery.md).
   The fixture's `.cdsproj` also adds Microsoft's reference-assemblies package so
   the legacy .NET Framework target can build on this host.
-- Microsoft Visual Studio/MSBuild on Windows, Azure DevOps, GitHub Actions,
+- Microsoft Visual Studio/MSBuild on Windows, Azure DevOps,
   Linux, IDE design-time/static-graph builds, Dataverse deployment/import, and
   other Microsoft package releases are not
   available for validation in this worktree. No support claim is made for them

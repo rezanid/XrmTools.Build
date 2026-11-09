@@ -177,7 +177,7 @@ range; changed/missing target definitions still require compatibility investigat
 | .NET SDK 10.0.403 / MSBuild 18.9.15 on macOS arm64 | Real packaging passed with Microsoft solution packages 2.13.1 and 2.14.1, and PCF package 2.14.1; not a broad platform certification |
 | Visual Studio MSBuild on Windows | Not yet tested |
 | Linux; IDE design-time/static-graph builds; other Microsoft versions | Not yet tested |
-| GitHub Actions | macOS/Windows .NET CI workflow added; results must be checked per run |
+| GitHub Actions / .NET 10.0.x on Windows and macOS | Package-first suite and all 30 test methods passed in [run 42715091002](https://github.com/rezanid/XrmTools.Build/actions/runs/42715091002), including both Microsoft solution versions |
 | Azure DevOps | Not yet tested |
 | Dataverse import or upgrade | Not tested; a successfully packaged ZIP does not prove that replacing an existing server-side plugin package is supported |
 

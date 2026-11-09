@@ -191,7 +191,13 @@ producer packages yet). Fixtures preserve source XML hashes.
 
 Verified locally on macOS arm64, .NET SDK 10.0.403/MSBuild 18.9.15. Windows and macOS
 dotnet CI is defined in `.github/workflows/build.yml`; a workflow definition alone
-is not evidence that a particular hosted run passed. Full desktop Visual Studio
+is not evidence that a particular hosted run passed.
+[Run 42715091002](https://github.com/rezanid/XrmTools.Build/actions/runs/42715091002)
+verified implementation commit `f8b44c1998250fc0f568e236c2ed59a55eeaab76`: both
+Windows and macOS jobs passed the package-first checks and all 30 test methods,
+using the configured .NET 10.0.x toolchain and both Microsoft solution versions.
+This proves hosted dotnet builds for that run, not full desktop MSBuild support.
+Full desktop Visual Studio
 MSBuild, Linux, Azure DevOps, static-graph/IDE design-time builds and Dataverse
 imports remain separate compatibility gates. The Python suites also accept
 `XRMTOOLS_MSBUILD_PATH` to exercise a desktop MSBuild executable after packing the
