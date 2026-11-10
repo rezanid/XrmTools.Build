@@ -218,10 +218,11 @@ It does not write pluginpackage.xml or stage/copy the file into a solution.
 
 ## Validation matrix and remaining integration risks
 
-`./eng/test-package.sh` packs the real build assets/tasks and runs both Python
+`./eng/test-package.sh` packs the real build assets/tasks and runs all Python
 standard-library suites. Tests inspect nupkg contents, metadata and build records,
-and final Microsoft-generated solution ZIPs (which deliberately contain no new
-producer packages yet). Fixtures preserve source XML hashes.
+and final Microsoft-generated solution ZIPs, including producer packages since
+Phase 5. Fixtures preserve source XML hashes. Phase 6 adds
+[execution-contract regressions](execution.md); the discovery adapter is unchanged.
 
 | Scenario | Available-host evidence |
 | --- | --- |

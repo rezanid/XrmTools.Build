@@ -22,15 +22,16 @@ namespace XrmTools.Build.Tasks
         public override bool Execute()
         {
             var timer = Stopwatch.StartNew();
+            var path = ZipPath;
             try
             {
                 Validate(ZipPath, string.Equals(PackageType, "Managed", StringComparison.OrdinalIgnoreCase) ? "1" : "0");
                 if (string.Equals(PackageType, "Both", StringComparison.OrdinalIgnoreCase))
                 {
                     // Microsoft's task exposes no output items. This is its documented Both naming contract.
-                    var managed = Path.Combine(Path.GetDirectoryName(ZipPath) ?? "",
+                    path = Path.Combine(Path.GetDirectoryName(ZipPath) ?? "",
                         Path.GetFileNameWithoutExtension(ZipPath) + "_managed" + Path.GetExtension(ZipPath));
-                    Validate(managed, "1");
+                    Validate(path, "1");
                 }
                 Log.LogMessage(MessageImportance.High, $"XrmTools.Build validated final solution ZIP '{ZipPath}' ({Packages.Length} plugin packages, {PackageType}).");
                 Log.LogMessage(MessageImportance.Normal, $"XrmTools.Build final ZIP validation: {timer.ElapsedMilliseconds} ms.");
@@ -39,8 +40,10 @@ namespace XrmTools.Build.Tasks
             catch (Exception exception) when (exception is IOException || exception is InvalidDataException || exception is XmlException ||
                 exception is ArgumentException || exception is UnauthorizedAccessException)
             {
-                Log.LogError(null, "XTB4002", null, ZipPath, 0, 0, 0, 0,
-                    "XrmTools.Build: final solution ZIP validation failed: " + exception.Message);
+                Log.LogError(null, "XTB4002", null, path, 0, 0, 0, 0,
+                    $"XrmTools.Build: final solution ZIP validation failed for '{path}' " +
+                    $"(SolutionPackageType='{PackageType}', expected version='{SolutionVersion}'): {exception.Message} " +
+                    "Rebuild successfully with isolated output paths; check custom packaging hooks/mappings for changed or omitted entries. An existing ZIP is not proof of success.");
                 return false;
             }
         }
@@ -59,7 +62,7 @@ namespace XrmTools.Build.Tasks
                 var solution = Read(entries, "solution.xml");
                 var manifest = PluginPackageFiles.Manifest(solution);
                 if (PluginPackageFiles.One(manifest, "Version").Value != SolutionVersion)
-                    throw new InvalidDataException("Final solution.xml version differs from XrmToolsResolvedSolutionVersion.");
+                    throw new InvalidDataException($"Final solution.xml version '{PluginPackageFiles.One(manifest, "Version").Value}' differs from XrmToolsResolvedSolutionVersion='{SolutionVersion}'.");
                 var expectedManifest = XElement.Parse(SolutionManifest);
                 var managedNode = PluginPackageFiles.One(expectedManifest, "Managed");
                 if (managedNode.Value == "2") managedNode.Value = managed;
@@ -87,7 +90,9 @@ namespace XrmTools.Build.Tasks
                      (name.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase) ||
                       name.EndsWith(".snupkg", StringComparison.OrdinalIgnoreCase))));
                 if (!expected.SetEquals(actual))
-                    throw new InvalidDataException("Final ZIP contains missing or unexpected plugin metadata/packages.");
+                    throw new InvalidDataException("Final ZIP contains missing or unexpected plugin metadata/packages. " +
+                        $"Missing: [{string.Join(", ", expected.Except(actual, StringComparer.OrdinalIgnoreCase))}]; " +
+                        $"unexpected: [{string.Join(", ", actual.Except(expected, StringComparer.OrdinalIgnoreCase))}].");
             }
         }
 

@@ -293,6 +293,42 @@ duplicating the cache filename constant.
 | 3 | Classify explicit plugin references without replacing Microsoft targets or hiding normal C#/PCF references | Real mixed-reference builds/ZIPs, restore graph, metadata and build-count assertions; scoped-filter risks recorded above |
 | 4 | Producer Pack, exact output discovery and validated fallbacks | Package-first artifact matrix, compiled-task validation and failed-instance recovery tests |
 | 5 | Plugin metadata creation, solution staging and final-ZIP validation | Source-only/producer/mixed fixtures, metadata/encoding, negative cases, failure recovery and final-ZIP tampering |
+| 6 | Diagnostics, predictable execution and package quality | Contextual error assertions, Clean/Restore/Build/Rebuild/Pack/NoBuild and isolated parallel regressions, built-package asset checks and extracted examples |
+
+### Phase 6 baseline assessment and changes
+
+The Phase 6 work started at merged remote main `b272863`. No `AGENTS.md` or
+`XrmTools-Build-Implementation-Plan.md` (including `plan/`) existed in that tree or
+the session Library. The current targets, tests and accepted ADR, not an earlier
+conversation or superseded plan proposals, supplied the implementation baseline.
+The complete baseline package-first run passed 48 methods.
+
+Already satisfied: validated Phase 4 artifacts; independent producer versions;
+staging-only metadata edits; preservation of identities/names; final validation of
+Unmanaged/Managed/Both; deliberate NoBuild package regeneration; incremental
+compilation and failed-build recovery. Neither adapter needed an execution change.
+No directory scanning/timestamp selection was added for producer artifacts.
+
+Remaining gaps addressed: generic errors omitted the active XML/artifact/root
+paths and some corrective guidance; execution contracts lacked direct cold/warm
+Restore/query, Clean/Rebuild/NoBuild and simultaneous isolated-run regressions;
+the built nupkg checks omitted README/license metadata and runnable examples;
+release notes and consolidated troubleshooting were missing. The probes showed
+no solution Pack target and NETSDK1085 when NoBuild was passed to normal reference
+Build. These are documented Microsoft/SDK boundaries, not reasons to replace
+targets or add another compatibility adapter.
+
+Phase 6 changes diagnostics and verification/documentation, not consumer scheduling
+or cleanup behavior. A package-project regression also demonstrated that its own
+BuildPackAdapters hook ran during `dotnet pack --no-build` and failed with
+NETSDK1085; that hook now respects NoBuild and packages prebuilt helpers instead.
+This does not change consumer producer Pack regeneration.
+See [execution](execution.md), [troubleshooting](troubleshooting.md)
+and [release notes](release-notes.md). Microsoft's Clean recursively owns its
+configured solution directories; separate user NuGet stores survive. Mixed
+user/build directories and shared-output concurrent writers remain unsupported.
+No new internal-target dependency, runtime package dependency, reference mutation,
+producer import change or broadened cleanup is introduced.
 
 Phase 0 baseline ZIPs with plugin packages/PCF references cannot be captured because
 the repository has no such projects. The minimal fixture added for Phase 1 is the

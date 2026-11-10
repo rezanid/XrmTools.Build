@@ -22,10 +22,12 @@ namespace XrmTools.Build.Tasks
         public override bool Execute()
         {
             var timer = Stopwatch.StartNew();
+            var inputPath = StageDirectory;
             try
             {
                 PluginPackageFiles.NoTreeLinks(StageDirectory);
-                var solution = PluginPackageFiles.ReadXml(Path.Combine(StageDirectory, "Other", "Solution.xml"));
+                inputPath = Path.Combine(StageDirectory, "Other", "Solution.xml");
+                var solution = PluginPackageFiles.ReadXml(inputPath);
                 var manifest = PluginPackageFiles.Manifest(solution);
                 SolutionManifest = manifest.ToString(SaveOptions.DisableFormatting);
                 var prefix = PluginPackageFiles.One(PluginPackageFiles.One(manifest, "Publisher"), "CustomizationPrefix").Value;
@@ -33,11 +35,12 @@ namespace XrmTools.Build.Tasks
                 var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var artifact in Artifacts)
                 {
+                    inputPath = artifact.ItemSpec;
                     var name = artifact.GetMetadata("XrmToolsPluginPackageUniqueName");
                     if (name.Length == 0)
                     {
                         if (!System.Text.RegularExpressions.Regex.IsMatch(prefix, @"\A[A-Za-z][A-Za-z0-9]*\z"))
-                            throw new InvalidDataException("A valid Publisher/CustomizationPrefix is required to derive plugin package unique names.");
+                            throw new InvalidDataException($"Publisher/CustomizationPrefix='{prefix}' cannot derive a plugin package unique name for '{artifact.ItemSpec}'. Supply a valid publisher prefix or explicit XrmToolsPluginPackageUniqueName.");
                         var id = artifact.GetMetadata("PackageId");
                         name = id.StartsWith(prefix + "_", StringComparison.OrdinalIgnoreCase) ? id : prefix + "_" + id;
                     }
@@ -45,6 +48,7 @@ namespace XrmTools.Build.Tasks
                     if (!names.Add(name)) throw new InvalidDataException($"Duplicate plugin package unique name '{name}' from validated artifacts.");
                     var packageDirectory = Path.Combine(directory, name);
                     var xmlPath = Path.Combine(packageDirectory, "pluginpackage.xml");
+                    inputPath = xmlPath;
                     var document = File.Exists(xmlPath) ? PluginPackageFiles.ReadXml(xmlPath) : Create(name);
                     var original = File.Exists(xmlPath) ? document.ToString(SaveOptions.DisableFormatting) : null;
                     var root = PluginPackageFiles.Metadata(document, name);
@@ -64,6 +68,7 @@ namespace XrmTools.Build.Tasks
                     var packagePath = Path.Combine(packageDirectory, "package", PluginPackageFiles.One(root, "package").Value);
                     if (PluginPackageFiles.Within(artifact.ItemSpec, StageDirectory))
                         throw new InvalidDataException($"Producer artifact '{artifact.ItemSpec}' must be outside Microsoft's intermediate staging directory.");
+                    inputPath = artifact.ItemSpec;
                     var actual = PluginPackageFiles.PackageIdentity(artifact.ItemSpec);
                     if (!string.Equals(actual.Id, artifact.GetMetadata("PackageId"), StringComparison.OrdinalIgnoreCase) ||
                         !NuGetVersion.TryParse(actual.Version, out var actualVersion) ||
@@ -73,6 +78,7 @@ namespace XrmTools.Build.Tasks
                     Directory.CreateDirectory(Path.GetDirectoryName(packagePath)!);
                     File.Copy(artifact.ItemSpec, packagePath, true);
                     PluginPackageFiles.One(root, "version").Value = SolutionVersion;
+                    inputPath = xmlPath;
                     if (original != document.ToString(SaveOptions.DisableFormatting))
                         PluginPackageFiles.Save(document, xmlPath);
                 }
@@ -87,6 +93,7 @@ namespace XrmTools.Build.Tasks
                         PluginPackageFiles.UniqueName(name);
                         if (!names.Add(name)) throw new InvalidDataException($"Duplicate plugin package directory '{name}' (case-insensitive).");
                         var xmlPath = Path.Combine(folder, "pluginpackage.xml");
+                        inputPath = xmlPath;
                         var document = PluginPackageFiles.ReadXml(xmlPath);
                         var root = PluginPackageFiles.Metadata(document, name);
                         var version = PluginPackageFiles.One(root, "version");
@@ -99,6 +106,7 @@ namespace XrmTools.Build.Tasks
                         var files = PackageFiles(folder);
                         if (files.Length != 1 || !string.Equals(Path.GetFullPath(files[0]), Path.GetFullPath(packagePath), StringComparison.Ordinal))
                             throw new InvalidDataException($"Plugin package '{name}' must contain exactly its referenced package '{packagePath}'.");
+                        inputPath = packagePath;
                         var identity = PluginPackageFiles.PackageIdentity(packagePath);
                         if (!NuGetVersion.TryParse(identity.Version, out _))
                             throw new InvalidDataException($"Plugin package '{name}' has invalid NuGet version '{identity.Version}'.");
@@ -126,7 +134,10 @@ namespace XrmTools.Build.Tasks
             catch (Exception exception) when (exception is IOException || exception is InvalidDataException || exception is XmlException ||
                 exception is ArgumentException || exception is UnauthorizedAccessException)
             {
-                Log.LogError(null, "XTB4001", null, null, 0, 0, 0, 0, "XrmTools.Build: cannot stage plugin packages: " + exception.Message);
+                Log.LogError(null, "XTB4001", null, inputPath, 0, 0, 0, 0,
+                    $"XrmTools.Build: cannot stage plugin packages in '{StageDirectory}' at input '{inputPath}' " +
+                    $"with solution version '{SolutionVersion}': {exception.Message} " +
+                    "Correct the source pluginpackage.xml/reference metadata or producer artifact; do not edit the temporary stage.");
                 return false;
             }
         }

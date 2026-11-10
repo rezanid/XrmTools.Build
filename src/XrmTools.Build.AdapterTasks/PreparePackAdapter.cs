@@ -55,7 +55,9 @@ namespace XrmTools.Build.Tasks
                 exception is IOException || exception is ArgumentException || exception is UnauthorizedAccessException)
             {
                 Log.LogError(null, "XTB3008", null, Producer.ItemSpec, 0, 0, 0, 0,
-                    "XrmTools.Build: cannot prepare the isolated NuGet adapter: " + exception.Message);
+                    $"XrmTools.Build: cannot prepare the isolated NuGet adapter for '{Producer.GetMetadata("FullPath")}' " +
+                    $"(SetConfiguration='{Producer.GetMetadata("SetConfiguration")}', SetPlatform='{Producer.GetMetadata("SetPlatform")}'): {exception.Message} " +
+                    "Correct the producer's imports/property assignments and restore its dependencies for these build dimensions.");
                 return false;
             }
         }

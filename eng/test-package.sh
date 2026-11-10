@@ -15,11 +15,23 @@ python3 - "$repo_root" <<'PY'
 from pathlib import Path
 import shutil
 import sys
+import subprocess
+import posixpath
+import re
+import os
 import zipfile
 import xml.etree.ElementTree as ET
 
 root = Path(sys.argv[1])
 version = ET.parse(root / "XrmTools.Build.csproj").findtext("./PropertyGroup/Version")
+helpers = list((root / "src").glob("*/bin/Release/*/*.dll"))
+assert helpers, "Pack did not build task helpers"
+before = {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in helpers}
+subprocess.run(["dotnet", "pack", str(root / "XrmTools.Build.csproj"), "--no-build",
+                "--output", str(root / "artifacts/local-feed"), "--verbosity", "quiet"],
+               env={**os.environ, "NUGET_PACKAGES": str(root / "artifacts/nuget-cache")},
+               check=True)
+assert before == {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in helpers}, "NoBuild compiled helpers"
 cache = root / "artifacts/nuget-cache/xrmtools.build" / version
 if cache.exists():
     shutil.rmtree(cache)
@@ -30,10 +42,35 @@ with zipfile.ZipFile(root / f"artifacts/local-feed/XrmTools.Build.{version}.nupk
                 "build/targets/PluginPackageMetadata.targets", "docs/plugin-package-staging.md",
                 "tools/netstandard2.0/XrmTools.Build.Tasks.dll", "tools/netstandard2.0/NuGet.Versioning.dll",
                 "tools/net8.0/XrmTools.Build.AdapterTasks.dll", "tools/net472/XrmTools.Build.AdapterTasks.dll",
-                "docs/architecture.md", "docs/artifact-discovery.md", "licenses/NuGet.Versioning.txt"}
+                "docs/architecture.md", "docs/artifact-discovery.md", "licenses/NuGet.Versioning.txt",
+                "README.md", "licenses/LICENSE", "docs/execution.md", "docs/troubleshooting.md",
+                "docs/release-notes.md", "docs/adr/0001-additive-nuget-build-extension.md",
+                "examples/README.md", "examples/Plugin/ExamplePlugin.csproj", "examples/Plugin/Example.cs",
+                "examples/Solution/Example.cdsproj", "examples/Solution/src/Other/Solution.xml",
+                "examples/Solution/src/Other/Customizations.xml"}
     assert required <= set(package.namelist()), required - set(package.namelist())
     assert not any(name.startswith(("lib/", "buildTransitive/")) for name in package.namelist())
-    assert not ET.fromstring(package.read("XrmTools.Build.nuspec")).findall(".//{*}dependency")
+    metadata = ET.fromstring(package.read("XrmTools.Build.nuspec")).find("{*}metadata")
+    assert not metadata.findall(".//{*}dependency")
+    assert metadata.findtext("{*}readme") == "README.md"
+    assert metadata.findtext("{*}license") == "MIT"
+    assert metadata.find("{*}license").attrib["type"] == "expression"
+    assert "Phase 6" in metadata.findtext("{*}releaseNotes")
+    assert package.read("README.md") == (root / "README.md").read_bytes()
+    assert package.read("licenses/LICENSE") == (root / "LICENSE").read_bytes()
+    assert package.read("licenses/NuGet.Versioning.txt") == (root / "licenses/NuGet.Versioning.txt").read_bytes()
+    assert {name for name in package.namelist() if name.endswith(".dll")} == {
+        "tools/netstandard2.0/XrmTools.Build.Tasks.dll", "tools/netstandard2.0/NuGet.Versioning.dll",
+        "tools/net8.0/XrmTools.Build.AdapterTasks.dll", "tools/net472/XrmTools.Build.AdapterTasks.dll"}
+    for name in package.namelist():
+        if name.endswith((".props", ".targets")):
+            ET.fromstring(package.read(name))
+        if name.endswith(".md"):
+            for link in re.findall(r"\[[^\]]*\]\(([^)]+)\)", package.read(name).decode()):
+                path = link.split("#", 1)[0]
+                if path and "://" not in path:
+                    target = posixpath.normpath(posixpath.join(posixpath.dirname(name), path))
+                    assert target in package.namelist(), f"Broken packaged link: {name} -> {link}"
 PY
 
 NUGET_PACKAGES="$nuget_cache" dotnet build "$plugin_fixture" --verbosity minimal \
@@ -126,3 +163,4 @@ echo "Phase 1/2 fixture passed; local package feed: $package_dir"
 python3 "$repo_root/eng/test-targets.py"
 python3 "$repo_root/eng/test-artifacts.py"
 python3 "$repo_root/eng/test-staging.py"
+python3 "$repo_root/eng/test-execution.py"

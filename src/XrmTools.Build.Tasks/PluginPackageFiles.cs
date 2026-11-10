@@ -62,7 +62,7 @@ namespace XrmTools.Build.Tasks
             var package = One(root, "package");
             if (!Regex.IsMatch(package.Value, @"\A[A-Za-z0-9_][A-Za-z0-9_.-]*\.nupkg\z", RegexOptions.IgnoreCase) ||
                 package.Value.EndsWith(".symbols.nupkg", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException($"Plugin package '{name}' must reference one nonempty primary .nupkg filename, without directories.");
+                throw new InvalidDataException($"Plugin package '{name}' has package='{package.Value}'; it must reference one nonempty primary .nupkg filename, without directories.");
             var identities = root.Elements(root.Name.Namespace + "managedidentityid").ToArray();
             if (identities.Length > 1) throw new InvalidDataException($"Plugin package '{name}' has duplicate managedidentityid elements.");
             if (identities.Length == 1) Identity(One(identities[0], "managedidentityid").Value);
