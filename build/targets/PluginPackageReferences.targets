@@ -1,0 +1,60 @@
+<Project>
+  <Target Name="XrmToolsGetPluginPackageProjects"
+          BeforeTargets="PrepareProjectReferences;_GenerateRestoreProjectPathWalk"
+          Returns="@(XrmToolsPluginPackageProject)"
+          Condition="'$(MSBuildProjectExtension)' == '.cdsproj'">
+    <Error Code="XTB2000"
+           Condition="'%(ProjectReference.XrmToolsPluginPackage)' != '' and !$([System.Text.RegularExpressions.Regex]::IsMatch('%(ProjectReference.XrmToolsPluginPackage)', '\A(?i:true|false)\z'))"
+           Text="XrmTools.Build: ProjectReference '%(ProjectReference.Identity)' has XrmToolsPluginPackage='%(ProjectReference.XrmToolsPluginPackage)'; use true or false." />
+    <ItemGroup>
+      <XrmToolsPluginPackageProject Include="@(ProjectReference)"
+                                   Condition="'%(ProjectReference.XrmToolsPluginPackage)' == 'true'" />
+    </ItemGroup>
+    <Error Code="XTB2001" Condition="'@(XrmToolsPluginPackageProject)' != '' and !Exists('%(XrmToolsPluginPackageProject.FullPath)')"
+           Text="XrmTools.Build: plugin-package project '%(XrmToolsPluginPackageProject.FullPath)' referenced by $(MSBuildProjectFullPath) does not exist." />
+    <Error Code="XTB2002" Condition="'@(XrmToolsPluginPackageProject)' != '' and '%(XrmToolsPluginPackageProject.Extension)' != '.csproj'"
+           Text="XrmTools.Build: marked plugin-package project '%(XrmToolsPluginPackageProject.Identity)' must be a .csproj. Leave ordinary C# and PCF references unmarked." />
+    <ItemGroup>
+      <_XrmToolsPluginProjectPath Include="@(XrmToolsPluginPackageProject->'%(FullPath)')" />
+      <_XrmToolsPluginUniqueName Include="@(XrmToolsPluginPackageProject->'%(XrmToolsPluginPackageUniqueName)')"
+                                 Condition="'%(XrmToolsPluginPackageProject.XrmToolsPluginPackageUniqueName)' != ''" />
+    </ItemGroup>
+    <RemoveDuplicates Inputs="@(_XrmToolsPluginProjectPath)">
+      <Output TaskParameter="Filtered" ItemName="_XrmToolsDistinctPluginProjectPath" />
+    </RemoveDuplicates>
+    <RemoveDuplicates Inputs="@(_XrmToolsPluginUniqueName)">
+      <Output TaskParameter="Filtered" ItemName="_XrmToolsDistinctPluginUniqueName" />
+    </RemoveDuplicates>
+    <Error Code="XTB2003"
+           Condition="'@(_XrmToolsPluginProjectPath->Count())' != '@(_XrmToolsDistinctPluginProjectPath->Count())'"
+           Text="XrmTools.Build: duplicate marked plugin-package project paths in $(MSBuildProjectFullPath): @(_XrmToolsPluginProjectPath, ', '). Reference each producer once." />
+    <Error Code="XTB2004"
+           Condition="'@(_XrmToolsPluginUniqueName->Count())' != '@(_XrmToolsDistinctPluginUniqueName->Count())'"
+           Text="XrmTools.Build: duplicate explicit XrmToolsPluginPackageUniqueName values in $(MSBuildProjectFullPath): @(_XrmToolsPluginUniqueName, ', '). Names must be unique (case-insensitive)." />
+  </Target>
+
+  <!-- Microsoft's target calls GetProjectOutputPath on every ProjectReference, ignoring ReferenceOutputAssembly.
+       Filter only for that call, after normal restore/build tracking, and restore the original metadata below. -->
+  <Target Name="_XrmToolsFilterMicrosoftProjectOutputs"
+          BeforeTargets="ProcessCdsProjectReferencesOutputs"
+          DependsOnTargets="_XrmToolsCheckSolutionTooling;XrmToolsGetPluginPackageProjects"
+          Condition="'$(MSBuildProjectExtension)' == '.cdsproj'">
+    <ItemGroup>
+      <_XrmToolsTemporarilyFilteredReference Include="@(ProjectReference)"
+                                            Condition="'%(ProjectReference.XrmToolsPluginPackage)' == 'true'" />
+      <ProjectReference Remove="@(_XrmToolsTemporarilyFilteredReference)"
+                        MatchOnMetadata="FullPath;XrmToolsPluginPackage" MatchOnMetadataOptions="CaseInsensitive" />
+    </ItemGroup>
+    <Warning Code="XTB2005" Condition="'@(_XrmToolsTemporarilyFilteredReference)' != ''"
+             Text="XrmTools.Build recognizes plugin-package projects but does not yet include their packages in the solution ZIP: @(_XrmToolsTemporarilyFilteredReference, ', '). Artifact discovery is available; Phase 5 staging is not implemented." />
+  </Target>
+
+  <Target Name="_XrmToolsRestoreMicrosoftProjectReferences"
+          AfterTargets="ProcessCdsProjectReferencesOutputs"
+          Condition="'$(MSBuildProjectExtension)' == '.cdsproj' and '@(_XrmToolsTemporarilyFilteredReference)' != ''">
+    <ItemGroup>
+      <ProjectReference Include="@(_XrmToolsTemporarilyFilteredReference)" />
+      <_XrmToolsTemporarilyFilteredReference Remove="@(_XrmToolsTemporarilyFilteredReference)" />
+    </ItemGroup>
+  </Target>
+</Project>

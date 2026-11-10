@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <PackageId>XrmTools.Build</PackageId>
+    <Version>0.3.0-phase4.1</Version>
+    <Authors>XrmTools</Authors>
+    <Description>Optional MSBuild extensions for Microsoft Dataverse solution projects.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="src/XrmTools.Build.Tasks/XrmTools.Build.Tasks.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
+    <ProjectReference Include="src/XrmTools.Build.AdapterTasks/XrmTools.Build.AdapterTasks.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" BuildReference="false" Private="false" SkipGetTargetFrameworkProperties="true" />
+    <None Include="src/XrmTools.Build.AdapterTasks/bin/$(Configuration)/net8.0/XrmTools.Build.AdapterTasks.dll" Pack="true" PackagePath="tools/net8.0/" />
+    <None Include="src/XrmTools.Build.AdapterTasks/bin/$(Configuration)/net472/XrmTools.Build.AdapterTasks.dll" Pack="true" PackagePath="tools/net472/" />
+    <None Include="src/XrmTools.Build.Tasks/bin/$(Configuration)/netstandard2.0/XrmTools.Build.Tasks.dll" Pack="true" PackagePath="tools/netstandard2.0/" />
+    <None Include="src/XrmTools.Build.Tasks/bin/$(Configuration)/netstandard2.0/NuGet.Versioning.dll" Pack="true" PackagePath="tools/netstandard2.0/" />
+    <None Include="build/XrmTools.Build.props" Pack="true" PackagePath="build/" />
+    <None Include="build/XrmTools.Build.targets" Pack="true" PackagePath="build/" />
+    <None Include="build/targets/*.targets" Pack="true" PackagePath="build/targets/" />
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <None Include="LICENSE" Pack="true" PackagePath="licenses/" />
+    <None Include="licenses/NuGet.Versioning.txt" Pack="true" PackagePath="licenses/" />
+    <None Include="docs/architecture.md" Pack="true" PackagePath="docs/" />
+    <None Include="docs/artifact-discovery.md" Pack="true" PackagePath="docs/" />
+    <None Include="docs/adr/0001-additive-nuget-build-extension.md" Pack="true" PackagePath="docs/adr/" />
+  </ItemGroup>
+  <Target Name="BuildPackAdapters" BeforeTargets="PrepareForBuild">
+    <MSBuild Projects="src/XrmTools.Build.AdapterTasks/XrmTools.Build.AdapterTasks.csproj"
+             Targets="Build" Properties="Configuration=$(Configuration)"
+             RemoveProperties="TargetFramework" />
+  </Target>
+</Project>

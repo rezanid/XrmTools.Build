@@ -1,0 +1,28 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net462</TargetFramework>
+    <PackageId>Computed.$(MSBuildProjectName)</PackageId>
+    <Version>5.6.7-beta</Version>
+    <AssemblyVersion>5.6.7.0</AssemblyVersion>
+    <FileVersion>5.6.7.0</FileVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+  <Target Name="RecordFixtureProducerBuild" AfterTargets="Build">
+    <WriteLinesToFile File="$(IntermediateOutputPath)build-count.txt"
+                      Lines="$(PackageId)|$(PackageVersion)|$(Version)|$(FileVersion)|$(FixtureDimension)|$(Configuration)"
+                      Overwrite="false" />
+  </Target>
+  <Target Name="RecordFixtureProducerPack" AfterTargets="Pack">
+    <WriteLinesToFile File="$(BaseIntermediateOutputPath)pack-count.txt"
+                      Lines="$(PackageId)|$(PackageVersion)|$(Configuration)"
+                      Overwrite="false" />
+  </Target>
+  <Target Name="XrmToolsGetPluginPackageArtifact" Returns="@(_FixtureArtifact)">
+    <ItemGroup>
+      <_FixtureArtifact Include="$(MSBuildProjectDirectory)/bin/$(Configuration)/$(PackageId).$(PackageVersion).nupkg"
+                        PackageId="$(PackageId)" PackageVersion="$(PackageVersion)" />
+    </ItemGroup>
+  </Target>
+</Project>

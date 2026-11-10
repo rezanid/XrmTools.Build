@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest>
+  <control namespace="XrmToolsFixture" constructor="Control" version="1.0.0"
+           display-name-key="FixtureControl" description-key="FixtureControl" control-type="standard">
+    <property name="value" display-name-key="Value" of-type="SingleLine.Text" usage="bound" required="true" />
+    <resources>
+      <code path="bundle.js" order="1" />
+    </resources>
+  </control>
+</manifest>
