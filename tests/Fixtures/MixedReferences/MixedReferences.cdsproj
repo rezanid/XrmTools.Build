@@ -11,7 +11,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
     <PackageReference Include="Microsoft.PowerApps.MSBuild.Solution" Version="$(FixtureMicrosoftVersion)" />
-    <PackageReference Include="XrmTools.Build" Version="0.3.0-phase4.1" PrivateAssets="all" />
+    <PackageReference Include="XrmTools.Build" Version="0.4.0-phase5" PrivateAssets="all" />
     <ProjectReference Include="ProducerA/ProducerA.csproj" ReferenceOutputAssembly="false"
                       Condition="'$(FixtureProducerCount)' != '0'">
       <XrmToolsPluginPackage>true</XrmToolsPluginPackage>

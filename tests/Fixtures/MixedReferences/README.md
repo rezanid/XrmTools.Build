@@ -19,6 +19,7 @@ and solution packager, not TypeScript or pcf-scripts compilation.
 The test runner copies the entire fixture tree to an ignored path with spaces
 before restoring and building, so fixture outputs and logs are isolated.
 
-The Phase 3 ZIP intentionally contains the PCF payload but no producer package.
-XTB2005 warns about this incomplete package-inclusion feature. Discovery is
-verified; Phase 5 staging is not implemented.
+The Phase 5 ZIP contains the PCF payload and exactly the selected producer
+packages. All plugin metadata versions match the solution version; each NuGet
+package retains its independent producer version. Tests inspect the final ZIP,
+reference restoration, source hashes and producer build counts.

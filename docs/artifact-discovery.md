@@ -2,9 +2,10 @@
 
 ## Scope and verified findings
 
-Phase 4 adds producer Pack and exact artifact validation, not plugin metadata
-creation or solution staging. Microsoft still owns the final solution ZIP.
-`XTB2005` warns that discovered producer packages are not yet included in it.
+Phase 4 adds producer Pack and exact artifact validation. Phase 5 now consumes
+its validated outputs for [plugin metadata and staging](plugin-package-staging.md).
+Microsoft still owns the final solution ZIP; the former incomplete-staging
+warning XTB2005 is retired.
 The Phase 3 classification/Returns contract and all per-reference metadata remain
 intact. No additional ProjectReference mutation is introduced. A review correction
 adds an isolated producer import for Pack only; no project file is rewritten.

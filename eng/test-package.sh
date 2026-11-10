@@ -19,13 +19,15 @@ import zipfile
 import xml.etree.ElementTree as ET
 
 root = Path(sys.argv[1])
-cache = root / "artifacts/nuget-cache/xrmtools.build/0.3.0-phase4.1"
+version = ET.parse(root / "XrmTools.Build.csproj").findtext("./PropertyGroup/Version")
+cache = root / "artifacts/nuget-cache/xrmtools.build" / version
 if cache.exists():
     shutil.rmtree(cache)
-with zipfile.ZipFile(root / "artifacts/local-feed/XrmTools.Build.0.3.0-phase4.1.nupkg") as package:
+with zipfile.ZipFile(root / f"artifacts/local-feed/XrmTools.Build.{version}.nupkg") as package:
     required = {"build/XrmTools.Build.props", "build/XrmTools.Build.targets",
                 "build/targets/PluginPackageReferences.targets", "build/targets/PluginPackageArtifacts.targets",
                 "build/targets/ProducerPackAdapter.targets",
+                "build/targets/PluginPackageMetadata.targets", "docs/plugin-package-staging.md",
                 "tools/netstandard2.0/XrmTools.Build.Tasks.dll", "tools/netstandard2.0/NuGet.Versioning.dll",
                 "tools/net8.0/XrmTools.Build.AdapterTasks.dll", "tools/net472/XrmTools.Build.AdapterTasks.dll",
                 "docs/architecture.md", "docs/artifact-discovery.md", "licenses/NuGet.Versioning.txt"}
@@ -120,6 +122,7 @@ fi
 NUGET_PACKAGES="$nuget_cache" dotnet msbuild "$fixture" -target:XrmToolsPrintConfiguration \
   -verbosity minimal -p:RestoreAdditionalProjectSources="$package_dir" | grep -F "XrmTools.Build imported" >/dev/null
 
-echo "Phase 1/2 fixture passed; local package: $package_dir/XrmTools.Build.0.3.0-phase4.1.nupkg"
+echo "Phase 1/2 fixture passed; local package feed: $package_dir"
 python3 "$repo_root/eng/test-targets.py"
 python3 "$repo_root/eng/test-artifacts.py"
+python3 "$repo_root/eng/test-staging.py"

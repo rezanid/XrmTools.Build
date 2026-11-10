@@ -1,0 +1,36 @@
+<Project>
+  <UsingTask TaskName="XrmTools.Build.Tasks.PreparePluginPackageStage"
+             AssemblyFile="$(MSBuildThisFileDirectory)../../tools/netstandard2.0/XrmTools.Build.Tasks.dll" />
+  <UsingTask TaskName="XrmTools.Build.Tasks.StagePluginPackages"
+             AssemblyFile="$(MSBuildThisFileDirectory)../../tools/netstandard2.0/XrmTools.Build.Tasks.dll" />
+  <UsingTask TaskName="XrmTools.Build.Tasks.ValidateSolutionPackage"
+             AssemblyFile="$(MSBuildThisFileDirectory)../../tools/netstandard2.0/XrmTools.Build.Tasks.dll" />
+
+  <Target Name="_XrmToolsPreparePluginPackageStage" BeforeTargets="CopyCdsSolutionContent"
+          DependsOnTargets="_XrmToolsCheckSolutionTooling"
+          Condition="'$(MSBuildProjectExtension)' == '.cdsproj' and '$(DesignTimeBuild)' != 'true'">
+    <XrmTools.Build.Tasks.PreparePluginPackageStage
+        StageDirectory="$(SolutionPackagerMetadataWorkingDirectory)" SourceDirectory="$(SolutionRootPath)"
+        IntermediateDirectory="$(IntermediateOutputPath)" />
+  </Target>
+
+  <Target Name="XrmToolsStagePluginPackages" BeforeTargets="PowerAppsPackage"
+          DependsOnTargets="XrmToolsResolveSolutionVersion;XrmToolsDiscoverPluginPackages"
+          Returns="@(_XrmToolsStagedPluginPackage)"
+          Condition="'$(MSBuildProjectExtension)' == '.cdsproj' and '$(DesignTimeBuild)' != 'true'">
+    <XrmTools.Build.Tasks.StagePluginPackages StageDirectory="$(SolutionPackagerMetadataWorkingDirectory)"
+        SolutionVersion="$(XrmToolsResolvedSolutionVersion)" Artifacts="@(XrmToolsPluginPackageArtifact)">
+      <Output TaskParameter="Packages" ItemName="_XrmToolsStagedPluginPackage" />
+      <Output TaskParameter="SolutionManifest" PropertyName="_XrmToolsStagedSolutionManifest" />
+    </XrmTools.Build.Tasks.StagePluginPackages>
+  </Target>
+
+  <Target Name="XrmToolsValidatePackage" AfterTargets="PowerAppsPackage"
+          Condition="'$(MSBuildProjectExtension)' == '.cdsproj' and '$(DesignTimeBuild)' != 'true'">
+    <Error Code="XTB4002" Condition="'$(_XrmToolsStagedSolutionManifest)' == ''"
+           Text="XrmTools.Build: final validation requires XrmToolsStagePluginPackages in this invocation; an old ZIP is not evidence of a successful build." />
+    <XrmTools.Build.Tasks.ValidateSolutionPackage ZipPath="$(SolutionPackageZipFilePath)"
+        SolutionVersion="$(XrmToolsResolvedSolutionVersion)" SolutionManifest="$(_XrmToolsStagedSolutionManifest)"
+        Packages="@(_XrmToolsStagedPluginPackage)" PackageType="$(SolutionPackageType)" />
+  </Target>
+</Project>

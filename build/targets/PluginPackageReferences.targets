@@ -45,8 +45,6 @@
       <ProjectReference Remove="@(_XrmToolsTemporarilyFilteredReference)"
                         MatchOnMetadata="FullPath;XrmToolsPluginPackage" MatchOnMetadataOptions="CaseInsensitive" />
     </ItemGroup>
-    <Warning Code="XTB2005" Condition="'@(_XrmToolsTemporarilyFilteredReference)' != ''"
-             Text="XrmTools.Build recognizes plugin-package projects but does not yet include their packages in the solution ZIP: @(_XrmToolsTemporarilyFilteredReference, ', '). Artifact discovery is available; Phase 5 staging is not implemented." />
   </Target>
 
   <Target Name="_XrmToolsRestoreMicrosoftProjectReferences"

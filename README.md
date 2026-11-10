@@ -5,7 +5,7 @@
 the consuming project retains control of the
 `Microsoft.PowerApps.MSBuild.Solution` version.
 
-## Implemented through Phase 4
+## Implemented through Phase 5
 
 The package currently proves conventional NuGet `build/` asset imports and a
 per-solution Dataverse version resolver. On a `.cdsproj`, resolution precedence is:
@@ -29,9 +29,11 @@ The resolved value is exposed to later targets in the solution project as
 Explicit plugin-package project references are classified separately from
 unmarked C# and PCF references, with metadata retained and invalid/duplicate
 references diagnosed. Phase 4 packs producers and validates their exact primary
-NuGet artifacts. **This prerelease does not include those `.nupkg` files in the
-solution ZIP or create/stamp `pluginpackage.xml`.** Builds with marked producers
-emit `XTB2005` to make that limitation visible. Phase 5 has not been implemented.
+NuGet artifacts. Phase 5 stages those artifacts, generates or preserves
+`pluginpackage.xml`, and synchronizes **all** included plugin XML versions,
+including source-only packages. Microsoft creates the solution ZIP; the extension
+then validates its manifest, plugin metadata, and exact embedded package bytes.
+Only intermediate files are changed.
 
 ## Usage
 
@@ -41,7 +43,7 @@ it:
 ```xml
 <ItemGroup>
   <PackageReference Include="Microsoft.PowerApps.MSBuild.Solution" Version="2.14.1" />
-  <PackageReference Include="XrmTools.Build" Version="0.3.0-phase4.1" PrivateAssets="all" />
+  <PackageReference Include="XrmTools.Build" Version="0.4.0-phase5" PrivateAssets="all" />
 </ItemGroup>
 ```
 
@@ -93,7 +95,7 @@ need whatever output contract Microsoft's targets normally require.
 through MSBuild's `Returns`/`TargetOutputs` contract. All reference metadata is
 preserved, including unique names with publisher prefixes, `ManagedIdentityId`,
 `AdditionalProperties`, and the `XrmToolsPluginPackagePath` override.
-These values are retained, not consumed for solution staging yet. Duplicate
+These values are consumed by solution staging. Duplicate
 marked paths, duplicate explicit unique names, missing projects, unsupported
 producer types, and invalid markers fail clearly. Computed package identities are
 not inferred from raw project XML. Producers need not reference XrmTools.Build.
@@ -144,6 +146,33 @@ evaluated producer identity or be supplied explicitly.
 See [artifact discovery](docs/artifact-discovery.md) for executable fallback
 examples, expected-identity metadata, diagnostics, and the tested matrix.
 
+### Staging and final ZIP validation
+
+`XrmToolsStagePluginPackages` consumes only the validated
+`XrmToolsPluginPackageArtifact` items. Explicit publisher-prefixed unique names
+are preserved; otherwise the solution publisher prefix is prepended to the
+validated NuGet ID (unless already present). An existing staged XML's package
+filename, display name, IDs, flags, namespaces, encoding, and unknown fields are
+preserved. An explicit reference `ManagedIdentityId` overrides the nested GUID;
+omitting it preserves an existing identity. New metadata uses customizable,
+active defaults and a filename matching the unique name.
+
+Pre-existing source-only packages are included and stamped too, without
+repacking or modifying their source archives. Missing/extra packages, malformed
+XML, unsafe paths, identity errors, and duplicates fail the build. The final
+`XrmToolsValidatePackage` hook checks Microsoft's actual Unmanaged, Managed, or
+Both outputs, including custom ZIP paths. It rejects missing, additional,
+duplicate, or changed plugin entries; an old ZIP left by a failed build is not
+reported as a successful output.
+
+Staging must be strictly inside `IntermediateOutputPath` and disjoint from
+`SolutionRootPath`, without symlinks/reparse points in either tree. The Microsoft
+metadata stage is exclusively intermediate build content, not a producer output
+directory. A narrow pre-copy reset of staged `pluginpackages` prevents leftovers
+from failed builds being silently included. User NuGet output directories remain
+untouched. See [staging](docs/plugin-package-staging.md) for the exact contract,
+diagnostics, overhead, and [complete pipeline review](docs/architecture.md#phases-05-architectural-review).
+
 ## Build and fixture
 
 Run the package-first regression suite with .NET, Python 3, Node/npm, and Bash:
@@ -165,10 +194,12 @@ Generated output is ignored. `python3 eng/test-targets.py` reruns target/integra
 tests after that local package has been built and restored.
 `python3 eng/test-artifacts.py` exercises Phase 4, including custom nuspecs,
 versionless output, symbols, NBGV, multi-target builds, invalid/ambiguous/missing
-artifacts, and Phase 3 failure recovery.
-The review-correction suite contains 35 test methods, including repeated actual
+artifacts, and Phase 3 failure recovery. `python3 eng/test-staging.py` exercises
+metadata preservation, source-only packages, configuration/version transitions,
+failure recovery, path safety, managed/Both outputs, and final-ZIP tampering.
+The suite includes repeated actual
 `dotnet build` calls with changed code/payloads, and passes locally on the tooling
-below. Hosted correction results are recorded with the pull request.
+below. Hosted results are recorded with the pull request.
 
 The extension depends on Microsoft's `CopyCdsSolutionContent`,
 `ProcessCdsProjectReferencesOutputs`, `PowerAppsPackage`, and
@@ -184,7 +215,7 @@ range; changed/missing target definitions still require compatibility investigat
 | .NET SDK 10.0.403 / MSBuild 18.9.15 on macOS arm64 | Real packaging passed with Microsoft solution packages 2.13.1 and 2.14.1, and PCF package 2.14.1; not a broad platform certification |
 | Visual Studio MSBuild on Windows | Not yet tested |
 | Linux; IDE design-time/static-graph builds; other Microsoft versions | Not yet tested |
-| GitHub Actions / .NET 10.0.x on Windows and macOS | Initial Phase 4 package-first suite and all 30 then-existing test methods passed in [run 42715091002](https://github.com/rezanid/XrmTools.Build/actions/runs/42715091002), including both Microsoft solution versions; review corrections expand this to 35 methods |
+| GitHub Actions / .NET 10.0.x on Windows and macOS | Phase 4 passed in [run 42715091002](https://github.com/rezanid/XrmTools.Build/actions/runs/42715091002). Phase 5 runs 48 methods with both Microsoft solution versions; current hosted results are recorded in the pull request |
 | Azure DevOps | Not yet tested |
 | Dataverse import or upgrade | Not tested; a successfully packaged ZIP does not prove that replacing an existing server-side plugin package is supported |
 

@@ -84,9 +84,9 @@ or future Dataverse packaging support on macOS or Linux.
   are validated before any numeric conversion using normalized string bounds;
   overflowing inputs produce XTB1003 rather than a property-function exception.
   Unchanged staged versions skip XmlPoke entirely.
-- No assertion is made about final ZIP plugin
-  XML or Dataverse upgrade support until those
-  phases have independent fixtures and tests.
+- Phase 5 now validates final ZIP plugin XML, embedded package bytes and preserved
+  metadata using independent fixtures. Dataverse deployment/upgrade behavior is
+  still unverified.
 
 ## Phase 3: explicit project-reference integration
 
@@ -131,8 +131,9 @@ project remains Microsoft's responsibility.
   Phase 4 adds explicit Pack/discovery processing described below, while retaining
   independent producer versions and build-count assertions.
 - Before Microsoft's reference-output processing, `_XrmToolsFilterMicrosoftProjectOutputs`
-  saves/removes only marked references and emits XTB2005: they are **not included**
-  in the solution ZIP yet. Unmarked C# and PCF references still reach the Microsoft target.
+  saves/removes only marked references. Unmarked C# and PCF references still reach
+  the Microsoft target. The original incomplete-inclusion warning XTB2005 was
+  retired when Phase 5 added staging.
 - `_XrmToolsRestoreMicrosoftProjectReferences` restores the saved items and metadata
   after successful Microsoft processing. The existing resolver then stamps the
   staged solution before `PowerAppsPackage`; Microsoft still creates the ZIP and
@@ -182,8 +183,8 @@ The mixed-reference fixture imports real Microsoft PCF targets and executes thei
 npm build contract against a minimal prebuilt control payload. It verifies
 reference processing and packaging, not pcf-scripts/TypeScript compilation. Final
 ZIP inspection requires solution version 4.5.6.7 and the prefixed PCF manifest and
-bundle; source XML hashes are unchanged. Producer `.nupkg` inclusion is explicitly
-absent and warned about. It is not plugin XML/import validation.
+bundle; source XML hashes are unchanged. Phase 5 extends these ZIP assertions with producer `.nupkg` inclusion and
+synchronized plugin XML. It is not Dataverse import validation.
 
 ## Phase 4: exact artifact discovery
 
@@ -211,6 +212,77 @@ failed project instance; a fresh invocation reevaluates complete references,
 builds successfully and discovers both packages. This remains a documented
 limitation, not an excuse to add more ProjectReference mutations.
 
+## Phase 5: staging and final ZIP validation
+
+See [plugin package staging](plugin-package-staging.md) for metadata precedence,
+path safety, final output contracts, diagnostics and the new compatibility
+assumptions. Stage and final-ZIP tasks reuse the existing netstandard2.0 assembly.
+They consume Phase 4's validated artifact items, not another discovery mechanism.
+No new NuGet/Microsoft internal targets are used or overwritten.
+
+The verified order is source/stage isolation check and plugin-only intermediate
+reset → Microsoft source copy/reference processing → solution version resolution
+→ Phase 4 discovery → plugin metadata/copy → Microsoft PowerAppsPackage →
+Microsoft cleanup and final ZIP validation (the latter two need not be ordered).
+Validation uses evidence captured before cleanup. All included source-only
+plugin packages are synchronized, including zero-producer builds.
+
+The new filesystem reset is necessary because Microsoft's copy only overlays
+files and failed builds skip its normal cleanup. A regression deliberately leaves
+bad staged metadata, deletes that source package, then verifies a fresh successful
+build excludes the stale component. The reset is restricted to intermediate
+`pluginpackages`, with ancestry/link checks before source copying. This is not a
+third ProjectReference or producer-pack state workaround.
+
+## Phases 0–5 architectural review
+
+The review retains the two existing compatibility adapters. No concrete evidence
+supports their safe elimination:
+
+| Question | Evidence and conclusion |
+| --- | --- |
+| Is producer compilation incremental? | The retained Phase 4 repeat-build matrix runs actual `dotnet build` four times with both Microsoft versions, with/without GeneratePackageOnBuild. Unchanged DLL hashes **and mtimes** remain identical; a source edit changes the DLL and embedded package payload. Stage/final validation call no producer targets. |
+| Are producers redundantly built? | Mixed 0/1/2 producer tests assert one Build record per referenced producer, including distinct Debug/Release dimensions. Multi-target outer Build is retained only to fill missing package TFMs; MSBuild caches already-built inner targets. No new Build call is added. |
+| Are packages redundantly generated? | Yes, intentionally: the isolated NoBuild adapter regenerates standard NuGet packaging; GeneratePackageOnBuild may add a prior Pack. Existing tests prove future-dated/same-ID stale payloads and same-size/same-time source payload changes cannot bypass it. Removing invalidation would weaken correctness. |
+| Can the temporary reference filter go away? | Both restored Microsoft targets hardcode `GetProjectOutputPath` on every ProjectReference, ignoring ReferenceOutputAssembly. Tests prove unmarked unsupported C# still fails normally; removing the filter would fail marked producers or require changing them/replacing Microsoft's target. Neither is a simplification of the supported contract. |
+| Are consecutive builds/configuration changes correct? | Unchanged builds, changed source/payload/PackageId/PackageVersion, Debug→Release→Debug, source-only packages, custom output directories and Both outputs inspect final package bytes and versions. Combined Managed=2 source is needed for Microsoft's default Debug=Unmanaged/Release=Managed switch; the extension does not convert an unmanaged-only source to managed. |
+| Are source files unchanged? | Target, artifact and staging suites compare source XML hashes/bytes before/after builds. Namespaces, UTF-16 declarations, comments, unknown fields, existing filenames/flags, prefixed names and nested managed identity survive final-ZIP inspection. Ancestry/symlink tests reject indirect source staging. |
+| Do normal C#/PCF references still work? | Real Microsoft PCF targets with a prebuilt control payload and ordinary C# output contracts remain in the Microsoft path; final ZIP checks preserve PCF manifest/bundle and solution root component. No new reference mutations are introduced. |
+| Do errors fail safely? | Missing/ambiguous/stale artifacts, malformed XML/archives, duplicate names, compiler/pack/staging failures and final-ZIP tampering fail explicitly. Failed builds can leave an older ZIP, but no validation success is emitted. A fresh invocation recovers; failed in-memory reference-filter instances retain the already documented limitation. |
+| Are there side effects beyond extra packaging time? | Yes: staged package copies/XML edits, narrow intermediate plugin reset, linear path/link checks and ZIP/hash I/O, plus transient private evidence items. User output paths, source XML and producer version properties are not changed. Stage directories are now restricted to intermediate/disjoint/unlinked locations; extensions observing/staging plugin files before the copy boundary must respect reset ordering. |
+
+### Compatibility and performance conclusions
+
+The extension remains additive, but not side-effect-free. The scoped reference
+filter can be observed by other hooks, appends restored marked references, and
+does not restore a failed in-memory instance. The pack adapter temporarily changes
+producer-only import globals and deliberately defeats NuGet Pack incrementality.
+Phase 5 adds no such adapter, but assumes Microsoft's stage and ZIP layout and
+uses the documented Both suffix because the task exposes no output items.
+An archive mapping that changes plugin entry paths fails validation rather than
+silently producing an unsupported layout.
+
+Phase 5 logs preparation, staging and final-ZIP validation times separately from Pack. Costs
+scale with file inventory and package bytes, not just package count; Both hashes
+both outputs. CI fixture timings are not performance guarantees for large real
+packages. The local small-fixture sample medians were 3 ms preparation, 3.5 ms
+staging and 1 ms final validation; [staging details](plugin-package-staging.md)
+record counts/ranges and their limited scope. Source-only archives do not incur
+Pack. Compilation is not deliberately
+invalidated. No source XML writes or user NuGet-output directory mutations are
+added. Concurrent writers sharing a producer output/stage, Visual Studio
+MSBuild/design-time/static-graph behavior, other Microsoft releases and Dataverse
+imports remain unverified.
+
+No broad refactoring is proposed. A future documented Microsoft package-reference
+output extension point could eliminate the filter; a public NuGet
+freshly-produced-output contract could avoid forced packaging. Neither exists in
+the inspected targets, so changing them now would trade measured reliability for
+speculation. The only implemented simplifications are retiring the obsolete
+incomplete-staging warning and sharing the existing nuspec reader; the package
+regression runner also reads the package version from the manifest instead of
+duplicating the cache filename constant.
+
 ## Prioritized implementation gates
 
 | Priority | Work | Acceptance evidence |
@@ -220,7 +292,7 @@ limitation, not an excuse to add more ProjectReference mutations.
 | 2 | Resolve explicit > enabled NBGV > staged `Solution.xml`; validate a four-part numeric version and stamp only staged content | Fixture builds for all sources, invalid-version failure, ZIP version check, unchanged source file |
 | 3 | Classify explicit plugin references without replacing Microsoft targets or hiding normal C#/PCF references | Real mixed-reference builds/ZIPs, restore graph, metadata and build-count assertions; scoped-filter risks recorded above |
 | 4 | Producer Pack, exact output discovery and validated fallbacks | Package-first artifact matrix, compiled-task validation and failed-instance recovery tests |
-| 5+ | Plugin metadata creation and solution staging | Not started; no producer packages copied into solution ZIPs |
+| 5 | Plugin metadata creation, solution staging and final-ZIP validation | Source-only/producer/mixed fixtures, metadata/encoding, negative cases, failure recovery and final-ZIP tampering |
 
 Phase 0 baseline ZIPs with plugin packages/PCF references cannot be captured because
 the repository has no such projects. The minimal fixture added for Phase 1 is the

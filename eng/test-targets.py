@@ -194,7 +194,7 @@ class ReferenceIntegration(unittest.TestCase):
         log = msbuild(project, "-t:Build", "-m:2", "-v:diagnostic",
                       f"-bl:{project.parent / 'build.binlog'}", *parameters, label="mixed-build")
         self.assertIn("Unmanaged Pack complete", log)
-        self.assertEqual("warning XTB2005:" in log, count > 0)
+        self.assertNotIn("warning XTB2005:", log)
         sequence = ("CopyCdsSolutionContent", "_XrmToolsFilterMicrosoftProjectOutputs",
                     "ProcessCdsProjectReferencesOutputs", "_XrmToolsRestoreMicrosoftProjectReferences",
                     "XrmToolsResolveSolutionVersion", "PowerAppsPackage")
@@ -217,7 +217,14 @@ class ReferenceIntegration(unittest.TestCase):
             for name in ("ControlManifest.xml", "bundle.js"):
                 self.assertEqual(package.read(f"Controls/xt_XrmToolsFixture.Control/{name}"),
                                  (project.parent / f"Control/prebuilt/{name}").read_bytes())
-            self.assertFalse(any(path.endswith(".nupkg") for path in files), files)
+            self.assertEqual(sum(path.endswith(".nupkg") for path in files), count)
+            for name in ("ProducerA", "ProducerB")[:count]:
+                base = f"pluginpackages/xt_{name}"
+                xml = ET.fromstring(package.read(f"{base}/pluginpackage.xml"))
+                self.assertEqual(xml.findtext("version"), "4.5.6.7")
+                configuration = "Release" if name == "ProducerB" else "Debug"
+                artifact = project.parent / name / f"bin/{configuration}/Computed.{name}.5.6.7-beta.nupkg"
+                self.assertEqual(package.read(f"{base}/package/xt_{name}.nupkg"), artifact.read_bytes())
         self.assertEqual(before, {path: digest(path) for path in source_xml})
         # Calling the public query target returns metadata without packing or rebuilding producers.
         state = query(msbuild(project, "-t:XrmToolsGetPluginPackageProjects",
