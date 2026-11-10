@@ -25,6 +25,7 @@
     <None Include="build/XrmTools.Build.props" Pack="true" PackagePath="build/" />
     <None Include="build/XrmTools.Build.targets" Pack="true" PackagePath="build/" />
     <None Include="build/targets/*.targets" Pack="true" PackagePath="build/targets/" />
+    <None Include="Sdk/*" Pack="true" PackagePath="Sdk/" />
     <None Include="README.md" Pack="true" PackagePath="/" />
     <None Include="LICENSE" Pack="true" PackagePath="licenses/" />
     <None Include="licenses/NuGet.Versioning.txt" Pack="true" PackagePath="licenses/" />
@@ -34,9 +35,11 @@
     <None Include="docs/execution.md" Pack="true" PackagePath="docs/" />
     <None Include="docs/troubleshooting.md" Pack="true" PackagePath="docs/" />
     <None Include="docs/release-notes.md" Pack="true" PackagePath="docs/" />
+    <None Include="docs/consumer-contract-prototype.md" Pack="true" PackagePath="docs/" />
     <None Include="examples/**/*" Exclude="examples/**/bin/**;examples/**/obj/**;examples/**/packages/**"
           Pack="true" PackagePath="examples/" />
     <None Include="docs/adr/0001-additive-nuget-build-extension.md" Pack="true" PackagePath="docs/adr/" />
+    <None Include="docs/adr/0002-consumer-contract-prototype.md" Pack="true" PackagePath="docs/adr/" />
   </ItemGroup>
   <Target Name="BuildPackAdapters" BeforeTargets="PrepareForBuild" Condition="'$(NoBuild)' != 'true'">
     <MSBuild Projects="src/XrmTools.Build.AdapterTasks/XrmTools.Build.AdapterTasks.csproj"

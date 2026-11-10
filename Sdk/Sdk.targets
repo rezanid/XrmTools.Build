@@ -1,0 +1,3 @@
+<Project>
+  <Import Project="$(MSBuildThisFileDirectory)../build/XrmTools.Build.targets" />
+</Project>

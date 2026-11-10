@@ -5,6 +5,11 @@
 the consuming project retains control of the
 `Microsoft.PowerApps.MSBuild.Solution` version.
 
+The [consumer-contract prototype](docs/consumer-contract-prototype.md) compares
+the current PackageReference entry point with a thin SDK wrapper. It records
+verified behavior, the remaining adapter trade-offs and pending Visual Studio
+gates; it does not declare the marker-free producer contract implemented.
+
 ## Implemented through Phase 6
 
 The package currently proves conventional NuGet `build/` asset imports and a

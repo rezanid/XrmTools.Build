@@ -47,7 +47,15 @@ with zipfile.ZipFile(root / f"artifacts/local-feed/XrmTools.Build.{version}.nupk
                 "docs/release-notes.md", "docs/adr/0001-additive-nuget-build-extension.md",
                 "examples/README.md", "examples/Plugin/ExamplePlugin.csproj", "examples/Plugin/Example.cs",
                 "examples/Solution/Example.cdsproj", "examples/Solution/src/Other/Solution.xml",
-                "examples/Solution/src/Other/Customizations.xml"}
+                "examples/Solution/src/Other/Customizations.xml",
+                "Sdk/Sdk.props", "Sdk/Sdk.targets",
+                "docs/consumer-contract-prototype.md", "docs/adr/0002-consumer-contract-prototype.md",
+                "examples/NuGet.Config", "examples/Control/ExampleControl.pcfproj",
+                "examples/Control/package.json", "examples/Control/build.mjs",
+                "examples/Control/src/ControlManifest.Input.xml", "examples/Control/src/index.js",
+                "examples/entry-points/PackageReference/Solution.cdsproj",
+                "examples/entry-points/Sdk/Solution.cdsproj",
+                "examples/entry-points/README.md"}
     assert required <= set(package.namelist()), required - set(package.namelist())
     assert not any(name.startswith(("lib/", "buildTransitive/")) for name in package.namelist())
     metadata = ET.fromstring(package.read("XrmTools.Build.nuspec")).find("{*}metadata")
@@ -164,3 +172,4 @@ python3 "$repo_root/eng/test-targets.py"
 python3 "$repo_root/eng/test-artifacts.py"
 python3 "$repo_root/eng/test-staging.py"
 python3 "$repo_root/eng/test-execution.py"
+NUGET_PACKAGES="$nuget_cache" python3 "$repo_root/eng/test-consumer-contract.py"

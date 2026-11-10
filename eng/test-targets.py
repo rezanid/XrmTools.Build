@@ -163,7 +163,7 @@ class VersionTargets(unittest.TestCase):
 
 
 class ReferenceIntegration(unittest.TestCase):
-    def build_mixed(self, count=2, microsoft="2.14.1", **properties):
+    def build_mixed(self, count=2, microsoft="2.14.1", probe_hooks=False, **properties):
         tree = fixture(f"mixed-{count}-{microsoft}-{len(list(RUN.iterdir()))}")
         project = tree / "MixedReferences" / "MixedReferences.cdsproj"
         source_xml = [path for path in tree.rglob("*.xml")
@@ -173,6 +173,45 @@ class ReferenceIntegration(unittest.TestCase):
                       "-p:XrmToolsSolutionVersion=4.5.6.7"]
         parameters += [f"-p:{key}={value}" for key, value in properties.items()]
         msbuild(project, "-t:Restore", *parameters, label="mixed-restore")
+        if probe_hooks:
+            namespace = "{http://schemas.microsoft.com/developer/msbuild/2003}"
+            document = ET.parse(project)
+            root = document.getroot()
+            observations = project.parent / "reference-hook.log"
+            for name, position, dependency, expected_count, expected_markers in (
+                ("ProbeReferenceVisibilityBefore", "BeforeTargets",
+                 "_XrmToolsFilterMicrosoftProjectOutputs", "2", "0"),
+                ("ProbeReferenceVisibilityAfter", "AfterTargets",
+                 "_XrmToolsRestoreMicrosoftProjectReferences", "4", "2"),
+            ):
+                target = ET.SubElement(root, f"{namespace}Target", {
+                    "Name": name,
+                    position: "ProcessCdsProjectReferencesOutputs",
+                    "DependsOnTargets": dependency,
+                })
+                ET.SubElement(target, f"{namespace}Error", {
+                    "Condition": f"'@(ProjectReference->Count())' != '{expected_count}'",
+                    "Text": f"{name}: unexpected ProjectReference visibility.",
+                })
+                ET.SubElement(target, f"{namespace}Error", {
+                    "Condition": (
+                        "'@(ProjectReference->WithMetadataValue"
+                        "('XrmToolsPluginPackage','true')->Count())' "
+                        f"!= '{expected_markers}'"
+                    ),
+                    "Text": f"{name}: unexpected marked producer visibility.",
+                })
+                ET.SubElement(target, f"{namespace}WriteLinesToFile", {
+                    "File": str(observations),
+                    "Lines": name,
+                    "Overwrite": "false",
+                })
+                ET.SubElement(target, f"{namespace}WriteLinesToFile", {
+                    "File": str(observations),
+                    "Lines": "@(ProjectReference->Count())",
+                    "Overwrite": "false",
+                })
+            document.write(project)
         preprocessed = project.parent / "preprocessed.xml"
         msbuild(project, f"-preprocess:{preprocessed}", *parameters, label="mixed-imports")
         imports = ET.parse(preprocessed).getroot()
@@ -201,11 +240,24 @@ class ReferenceIntegration(unittest.TestCase):
         positions = [log.index(f'Target "{name}:') for name in sequence
                      if count or name != "_XrmToolsRestoreMicrosoftProjectReferences"]
         self.assertEqual(positions, sorted(positions))
+        if probe_hooks:
+            expected = [
+                "ProbeReferenceVisibilityBefore",
+                "2",
+                "ProbeReferenceVisibilityAfter",
+                "4",
+            ]
+            self.assertEqual((project.parent / "reference-hook.log").read_text().splitlines(), expected)
+            msbuild(project, "-t:Build", "-m:2", "-v:diagnostic", *parameters,
+                    label="mixed-repeat-build")
+            self.assertEqual((project.parent / "reference-hook.log").read_text().splitlines(),
+                             expected * 2)
         self.assertTrue((project.parent / "Ordinary/obj/Debug/net462/output-contract.txt").exists())
         for name in ("ProducerA", "ProducerB")[:count]:
             configuration = "Release" if name == "ProducerB" else "Debug"
             records = (project.parent / name / f"obj/{configuration}/net462/build-count.txt").read_text().splitlines()
-            self.assertEqual(records, [f"Computed.{name}|5.6.7-beta|5.6.7-beta|5.6.7.0|{name[-1]}|{configuration}"])
+            expected_record = f"Computed.{name}|5.6.7-beta|5.6.7-beta|5.6.7.0|{name[-1]}|{configuration}"
+            self.assertEqual(records, [expected_record] * (2 if probe_hooks else 1))
         archive = project.parent / "bin" / "Debug" / "MixedReferences.zip"
         with zipfile.ZipFile(archive) as package:
             solution = ET.fromstring(package.read("solution.xml"))
@@ -243,7 +295,7 @@ class ReferenceIntegration(unittest.TestCase):
         for name in ("ProducerA", "ProducerB")[:count]:
             configuration = "Release" if name == "ProducerB" else "Debug"
             self.assertEqual(len((project.parent / name / f"obj/{configuration}/net462/build-count.txt")
-                                 .read_text().splitlines()), 1)
+                                 .read_text().splitlines()), 2 if probe_hooks else 1)
         return project, parameters
 
     def test_zero_one_multiple_producers_with_pcf(self):
@@ -253,6 +305,9 @@ class ReferenceIntegration(unittest.TestCase):
 
     def test_previous_microsoft_solution_package(self):
         self.build_mixed(microsoft="2.13.1")
+
+    def test_reference_hooks_run_once_in_order_with_filtered_and_restored_references(self):
+        self.build_mixed(probe_hooks=True)
 
     def test_no_dependency_build_requested(self):
         project, parameters = self.build_mixed()

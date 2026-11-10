@@ -283,6 +283,31 @@ incomplete-staging warning and sharing the existing nuspec reader; the package
 regression runner also reads the package version from the manifest instead of
 duplicating the cache filename constant.
 
+## Consumer-contract prototype
+
+The current recommendation and evidence are in
+[consumer-contract-prototype.md](consumer-contract-prototype.md) and
+[ADR 0002](adr/0002-consumer-contract-prototype.md). The recommendation is to
+retain the conventional PackageReference entry point and defer both automatic
+producer recognition and SDK adoption. The import-only SDK experiment shares the
+same targets; it does not change Microsoft packaging or remove adapters.
+
+An exact producer-return target can avoid guessing package paths and, when it
+returns package identity/version, can avoid `_GetOutputItemsFromPack` as the
+selection fallback. It does not prove package freshness and does not bypass the
+isolated Pack invalidation path. Microsoft's actual
+`ProcessCdsProjectReferencesOutputs` still calls `GetProjectOutputPath` for
+every reference, including `ReferenceOutputAssembly=false`; no safe way to
+remove the temporary filter was demonstrated. Existing marker-based behavior
+remains the only production contract in this prototype.
+
+The existing mixed-reference PCF fixture still uses its prebuilt output. A
+separate source-driven consumer example invokes Microsoft PCF targets and proves
+CLI source-change scheduling and changed ZIP content, but not desktop Visual
+Studio scheduling or the official `pcf-scripts`/TypeScript compilation flow.
+The dated VS smoke report was missing from the inspected refs; the manual VS
+procedure and pending evidence are recorded in the prototype report.
+
 ## Prioritized implementation gates
 
 | Priority | Work | Acceptance evidence |
