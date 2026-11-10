@@ -288,9 +288,12 @@ duplicating the cache filename constant.
 The current recommendation and evidence are in
 [consumer-contract-prototype.md](consumer-contract-prototype.md) and
 [ADR 0002](adr/0002-consumer-contract-prototype.md). The recommendation is to
-retain the conventional PackageReference entry point and defer both automatic
-producer recognition and SDK adoption. The import-only SDK experiment shares the
-same targets; it does not change Microsoft packaging or remove adapters.
+retain the conventional PackageReference entry point. Distinct local package
+artifacts test automatic producer recognition and import-only SDK forwarding;
+neither experimental asset is in the default package. Recognition of Microsoft's
+evaluated plugin capability works with plain references in a framework-compatible
+solution, but default net462/net48 restore compatibility and ordinary library
+output handling remain limitations. Neither adapter is removed.
 
 An exact producer-return target can avoid guessing package paths and, when it
 returns package identity/version, can avoid `_GetOutputItemsFromPack` as the
@@ -299,7 +302,11 @@ isolated Pack invalidation path. Microsoft's actual
 `ProcessCdsProjectReferencesOutputs` still calls `GetProjectOutputPath` for
 every reference, including `ReferenceOutputAssembly=false`; no safe way to
 remove the temporary filter was demonstrated. Existing marker-based behavior
-remains the only production contract in this prototype.
+remains the default package contract. The separate recognition experiment can
+omit the marker while retaining that same scoped filter and private Pack adapter.
+The real PAC producer provides `GetProjectOutputPath`, unlike the old non-plugin
+fixture; Microsoft's task requires assembly-registration configuration for its
+assembly output when the filter is absent.
 
 The existing mixed-reference PCF fixture still uses its prebuilt output. A
 separate source-driven consumer example invokes Microsoft PCF targets and proves

@@ -8,7 +8,11 @@ the consuming project retains control of the
 The [consumer-contract prototype](docs/consumer-contract-prototype.md) compares
 the current PackageReference entry point with a thin SDK wrapper. It records
 verified behavior, the remaining adapter trade-offs and pending Visual Studio
-gates; it does not declare the marker-free producer contract implemented.
+gates; it does not adopt marker-free recognition in the default package.
+The [separate recognition experiment](examples/automatic/README.md) demonstrates
+plain references with real PAC plugin targets in a compatible-framework solution
+and records the default-restore and ordinary-reference limitations. Prototype SDK
+and recognition assets are excluded from the default package.
 
 ## Implemented through Phase 6
 

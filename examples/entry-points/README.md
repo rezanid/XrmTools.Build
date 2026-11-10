@@ -3,7 +3,9 @@
 These are complete CLI consumer projects using the same `XrmTools.Build` targets
 and Microsoft-generated solution ZIP. The package-reference project is the
 existing, supported entry point. The versioned SDK project is a prototype wrapper
-packaged beside the same core assets; it does not replace Microsoft targets.
+available only with an explicit prototype pack option and a distinct package
+version. It forwards imports only; Microsoft references, Common imports and
+project defaults remain in the consumer file.
 
 The examples intentionally retain `XrmToolsPluginPackage=true`: that marker is
 required by the current implementation. Neither entry point proves the requested
@@ -30,6 +32,8 @@ then restore/build either project:
 
 ```sh
 dotnet pack XrmTools.Build.csproj --output artifacts/local-feed
+dotnet pack XrmTools.Build.csproj --no-build --output artifacts/local-feed \
+  -p:XrmToolsPrototypeSdk=true -p:PackageVersion=0.5.0-sdk-prototype
 dotnet build examples/entry-points/PackageReference/Solution.cdsproj \
   -p:XrmToolsSolutionVersion=4.5.6.7
 dotnet build examples/entry-points/Sdk/Solution.cdsproj \
@@ -50,3 +54,6 @@ Both projects reference the same plugin producer and PCF project. The producer
 owns its NuGet version and output path; the PCF project owns its source build.
 The checked-in PCF build script reads `src/index.js` on each Microsoft PCF target
 invocation, so a source edit changes the ZIP payload without a prebuilt bundle.
+This script is not official PAC TypeScript/pcf-scripts compilation. The separate
+[automatic recognition experiment](../automatic/README.md) uses a real
+PAC-generated plugin producer and documents plain-reference behavior.

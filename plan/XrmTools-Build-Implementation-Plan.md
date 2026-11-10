@@ -2,7 +2,7 @@
 
 **Status:** Phases 0–6 merged; consumer-contract prototype completed with a defer recommendation; release compatibility and deployment certification remain outstanding
 **Prepared:** 9 November 2026
-**Updated:** 10 November 2026, after consumer-contract prototype and plan merge (`b7b42c6`, PR #4)
+**Updated:** 11 November 2026, PR #5 recognition revision after reviewed commit `5a22cf9`
 **Scope:** A small NuGet package providing MSBuild `.props` and `.targets` to extend Microsoft's existing Dataverse solution projects (`.cdsproj`) and optional plugin-producing `.csproj` projects.
 
 ## 0. Current decisions and next gate (authoritative)
@@ -20,7 +20,7 @@ No claim of desktop Visual Studio or Dataverse support follows from milestone co
 | Phases 0–4 | Merged in PR #1; package imports, solution versioning, explicit producer classification and validated artifact discovery implemented. Original cross-environment exit gates remain subject to the support table. |
 | Phase 5 | Merged in PR #2; intermediate package/metadata staging and final Microsoft ZIP validation; 48 regression methods passed on Windows/macOS CLI. |
 | Phase 6 | Merged in PR #3; diagnostics, execution contracts, package documentation/examples and extension-package NoBuild fix; 55 methods passed on Windows/macOS CLI. |
-| Consumer contract | Prototype compared a pinned SDK wrapper with PackageReference and rechecked producer output contracts; no runtime adapter was removed. See `docs/consumer-contract-prototype.md` and ADR 0002. |
+| Consumer contract | PR #5 now includes a separate evaluated-recognition artifact using real PAC plugin tooling, plus an opt-in SDK artifact. Plain references work in the compatible-framework diagnostic; default restore and ordinary-library limitations remain. No runtime adapter was removed. See `docs/consumer-contract-prototype.md` and ADR 0002. |
 | Next | Resolve the documented Visual Studio gates and decide whether a marker-free producer contract can preserve the tested Microsoft reference boundary. |
 | Phases 7–8 | Not complete. Deployment, desktop IDE and broader compatibility evidence, migration and release remain gated. |
 
@@ -105,16 +105,26 @@ The SDK wrapper imports the same core successfully, but it does not remove the
 marker, reference-filter adapter, forced NuGet packaging, or metadata-staging
 reset; it adds an SDK resolver/source/version pin outside the normal package
 restore graph. Shorter XML is not sufficient evidence to adopt it.
+It only forwards imports, leaving Microsoft references and project defaults
+in the consumer. It is now excluded from the default package and available only
+with an explicit prototype pack option and a distinct version.
 
 The actual Microsoft `ProcessCdsProjectReferencesOutputs` target still calls
 `GetProjectOutputPath` on every `ProjectReference`, including references with
-`ReferenceOutputAssembly=false`. A producer capability target can identify
-participants without reading project XML, but the prototype does not establish a
-supported way to suppress the producer assembly at that Microsoft boundary
-without retaining temporary reference filtering or replacing Microsoft's target.
+`ReferenceOutputAssembly=false`. The revision implements an evaluated capability
+query against Microsoft's `PowerAppsComponentType=Plugin` signal, without child
+XML parsing, Build or Pack. Only the real PAC producer is recognized; ordinary
+libraries with PackageId and XrmTools.Build are not. Plain references need no
+marker, unique name or ReferenceOutputAssembly metadata in the compatible-net48
+diagnostic, while the existing scoped reference filter remains necessary.
+The default net462 solution/PAC net48 producer fails Restore with NU1201; adding
+an ordinary class library preserves Microsoft's MSB4057 output-target failure.
+These limitations are not hidden by reference mutations or project rewrites.
 The current producer-return target reports an exact artifact path and identity;
 the standard-package freshness guarantee still depends on the isolated NuGet
-adapter. No safe generic replacement was demonstrated.
+adapter. No safe generic replacement was demonstrated. Recognition is evaluated
+independently of adapter removal in a distinct `0.5.0-recognition` local artifact,
+not adopted silently by the default package.
 
 The dated VS smoke-test report named in the investigation request is absent from
 the inspected main and planning branch. The current CLI prototype must not be

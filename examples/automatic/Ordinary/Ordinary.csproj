@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net462</TargetFramework>
+    <PackageId>Ordinary.NotAPlugin</PackageId>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="XrmTools.Build" Version="0.5.0-recognition" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

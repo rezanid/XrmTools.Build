@@ -19,9 +19,47 @@ ARTIFACTS = ROOT / "artifacts"
 FEED = ARTIFACTS / "local-feed"
 CACHE = Path(os.environ.get("NUGET_PACKAGES", ARTIFACTS / "nuget-cache"))
 VERSION = ET.parse(ROOT / "XrmTools.Build.csproj").findtext("./PropertyGroup/Version")
+SDK_VERSION = "0.5.0-sdk-prototype"
+RECOGNITION_VERSION = "0.5.0-recognition"
 RUN = Path(tempfile.mkdtemp(prefix="consumer-contract ", dir=ARTIFACTS))
 ENV = {**os.environ, "NUGET_PACKAGES": str(CACHE)}
 ET.register_namespace("", "http://schemas.microsoft.com/developer/msbuild/2003")
+
+
+def pack_experiments():
+    for version, option in ((SDK_VERSION, "XrmToolsPrototypeSdk"),
+                            (RECOGNITION_VERSION, "XrmToolsPrototypeRecognition")):
+        rejected_output = RUN / f"rejected-{option}"
+        rejected = subprocess.run(
+            ["dotnet", "pack", str(ROOT / "XrmTools.Build.csproj"), "--no-build",
+             "--output", str(rejected_output), "--verbosity", "quiet", f"-p:{option}=true"],
+            cwd=ROOT, env=ENV, capture_output=True, text=True)
+        assert rejected.returncode != 0, "Prototype pack accepted the default version"
+        assert "Prototype assets require a distinct PackageVersion" in rejected.stdout + rejected.stderr
+        assert not list(rejected_output.glob("*.nupkg"))
+        subprocess.run(["dotnet", "pack", str(ROOT / "XrmTools.Build.csproj"), "--no-build",
+                        "--output", str(FEED), "--verbosity", "quiet",
+                        f"-p:{option}=true", f"-p:PackageVersion={version}"],
+                       cwd=ROOT, env=ENV, check=True)
+        cached = CACHE / "xrmtools.build" / version
+        if cached.exists():
+            shutil.rmtree(cached)
+    with zipfile.ZipFile(FEED / f"XrmTools.Build.{VERSION}.nupkg") as baseline, \
+            zipfile.ZipFile(FEED / f"XrmTools.Build.{SDK_VERSION}.nupkg") as sdk, \
+            zipfile.ZipFile(FEED / f"XrmTools.Build.{RECOGNITION_VERSION}.nupkg") as recognition:
+        for package in (baseline, recognition):
+            assert not any(name.startswith("Sdk/") for name in package.namelist())
+        assert {"Sdk/Sdk.props", "Sdk/Sdk.targets"} <= set(sdk.namelist())
+        capability = "build/experiments/ProducerRecognition.targets"
+        assert capability not in baseline.namelist()
+        assert capability not in sdk.namelist()
+        assert capability in recognition.namelist()
+        for name in ("build/XrmTools.Build.props", "build/XrmTools.Build.targets"):
+            assert baseline.read(name) == sdk.read(name) == recognition.read(name)
+        shared_targets = [name for name in baseline.namelist()
+                          if name.startswith("build/targets/") and name.endswith(".targets")]
+        for name in shared_targets:
+            assert baseline.read(name) == sdk.read(name) == recognition.read(name)
 
 
 def digest(value):
@@ -86,19 +124,22 @@ def prepare_examples(name):
 class ConsumerEntrypoints(unittest.TestCase):
     def test_both_entrypoints_share_core_and_build_source_driven_pcf(self):
         examples = prepare_examples("entry-points")
-        solution_source = ROOT / "examples/Solution/src/Other/Solution.xml"
-        source_manifest_before = digest(solution_source.read_bytes())
+        solution_source = examples / "Solution/src/Other/Solution.xml"
         pcf_source = examples / "Control/src/index.js"
         package_project = examples / "entry-points/PackageReference/Solution.cdsproj"
         sdk_project = examples / "entry-points/Sdk/Solution.cdsproj"
 
+        before = solution_source.read_bytes()
         run(package_project, label="package-reference")
+        self.assertEqual(before, solution_source.read_bytes())
         package_result = verify_zip(package_project, pcf_source)
         package_assets = json.loads((package_project.parent / "obj/project.assets.json").read_text())
         package_libraries = {name.lower() for name in package_assets["libraries"]}
         self.assertIn(f"xrmtools.build/{VERSION}".lower(), package_libraries)
 
+        before = solution_source.read_bytes()
         run(sdk_project, label="sdk-entrypoint")
+        self.assertEqual(before, solution_source.read_bytes())
         sdk_result = verify_zip(sdk_project, pcf_source)
         sdk_assets = json.loads((sdk_project.parent / "obj/project.assets.json").read_text())
         sdk_libraries = {name.lower() for name in sdk_assets["libraries"]}
@@ -109,6 +150,8 @@ class ConsumerEntrypoints(unittest.TestCase):
                         f"-preprocess:{preprocessed}"], cwd=sdk_project.parent,
                        env=ENV, check=True, capture_output=True, text=True)
         evaluated = ET.parse(preprocessed).getroot()
+        self.assertIn(f"xrmtools.build/{SDK_VERSION}/Sdk/Sdk.props".lower(),
+                      preprocessed.read_text().replace("\\", "/").lower())
         for target in ("ProcessCdsProjectReferencesOutputs",
                        "XrmToolsGetPluginPackageProjects",
                        "XrmToolsDiscoverPluginPackages"):
@@ -119,10 +162,11 @@ class ConsumerEntrypoints(unittest.TestCase):
 
         changed = pcf_source.read_text() + "\nexport const sourceRevision = 'changed';\n"
         pcf_source.write_text(changed)
+        before = solution_source.read_bytes()
         run(sdk_project, label="sdk-pcf-source-change")
+        self.assertEqual(before, solution_source.read_bytes())
         changed_result = verify_zip(sdk_project, pcf_source)
         self.assertNotEqual(sdk_result[1], changed_result[1])
-        self.assertEqual(source_manifest_before, digest(solution_source.read_bytes()))
 
     def test_marker_free_project_reference_fails_microsoft_output_processing(self):
         examples = prepare_examples("marker-free")
@@ -150,6 +194,10 @@ class ConsumerEntrypoints(unittest.TestCase):
         self.assertEqual(package_versions["Microsoft.PowerApps.MSBuild.Solution"],
                          "$(MicrosoftSolutionBuildVersion)")
         self.assertNotIn("XrmTools.Build", package_versions)
+
+    @classmethod
+    def setUpClass(cls):
+        pack_experiments()
 
 
 if __name__ == "__main__":

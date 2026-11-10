@@ -1,27 +1,30 @@
 # Consumer-contract prototype
 
 **Status:** CLI prototype only; no production consumer-contract change is adopted.
-The existing package build remains the baseline. This investigation changes no
-runtime target behavior except adding an import-only SDK wrapper as an opt-in
-packaged experiment and adding a source-driven PCF consumer example alongside
-the existing prebuilt test fixture. No package is published or deployed.
+The default package retains explicit-marker classification. Separate, distinctly
+versioned local artifacts enable evaluated producer recognition and an import-only
+SDK wrapper. Neither experiment is in the default package. No package is published
+or deployed. The revision started with a clean branch at the reviewed `5a22cf9`;
+local and remote heads matched, with no subsequent changes to overwrite.
 
 ## Decision
 
 Keep the conventional `XrmTools.Build` `PackageReference` as the supported
-entry point for now. Defer a producer-owned automatic-recognition contract until
-it can preserve Microsoft's reference processing without an unsafe workaround.
+entry point. Automatic recognition works in the experiment when the solution's
+framework is compatible with the PAC producer, **without reference metadata**.
+It does not by itself make a default net462 solution compatible with PAC's net48
+producer, nor make ordinary class libraries valid Microsoft solution outputs.
+Defer production adoption until these consumer and VS gates are resolved.
 Do not make the thin SDK the default: it imports the same targets, but does not
 remove any execution adapter or consumer configuration, and introduces NuGet
 SDK-resolution/source/version-pin concerns outside the project restore graph.
 The side-by-side project files are in
 [`examples/entry-points`](../examples/entry-points/README.md).
 
-This is not a claim that the desired consumer contract has been achieved. Both
-examples still use `XrmToolsPluginPackage=true`; current package-only builds still
-need that marker. Adding `XrmTools.Build` to a producer makes its targets
-available, but does not by itself establish producer intent or make the current
-solution classifier recognize it.
+**Separate answers:** the marker can be removed for a Microsoft plugin-package
+producer in the framework-compatible recognition experiment. Neither the scoped
+reference filter nor the isolated Pack adapter can be removed on this evidence.
+The default package and the original entry-point comparison still use markers.
 
 ## Baseline and evidence
 
@@ -64,14 +67,85 @@ configured NuGet source. Both builds embedded the exact producer `.nupkg` bytes
 and source-generated PCF bundle; editing `Control/src/index.js` changed the
 final ZIP bundle bytes. Source `Solution.xml` remained unchanged.
 
-The marker-free CLI probe is a concrete negative result. With the recommended
+The original marker-free CLI probe remains baseline evidence, not the recognition
+experiment. With the recommended
 `ReferenceOutputAssembly=false` metadata but no XrmTools marker, the real
 Microsoft 2.14.1 reference-processing target fails with `MSB4057` because the
 producer project has no `GetProjectOutputPath` target; no ZIP is created. With
 the default `ReferenceOutputAssembly=true`, this `.NETStandard` producer instead
 fails earlier with `NETSDK1050` on the tested .NET 10 SDK. Neither failure is
 hidden by changing target frameworks or consumer projects. These are CLI
-observations, not Visual Studio behavior.
+observations, not Visual Studio behavior. That producer does **not** import
+Microsoft plugin targets; its missing output target is not evidence that a
+PAC-generated producer lacks that target.
+
+## Evaluated recognition experiment (PR #5 revision)
+
+PAC **2.14.1+g6f517e5** (`.NET 10.0.2`) generated
+[`examples/automatic/Plugin/Plugin.csproj`](../examples/automatic/Plugin/Plugin.csproj)
+using `pac plugin init --outputDirectory examples/automatic/Plugin --author XrmTools --skip-signing`.
+The generated project/source/imports are retained; floating package references
+were pinned and the experimental XrmTools PackageReference added. This unsigned
+fixture is build evidence, not Dataverse registration/deployment certification.
+The restored versions are Microsoft plugin targets **1.52.1**, CRM SDK core
+assemblies **9.0.2.60**, and .NET Framework reference assemblies **1.0.3**.
+The solution matrix is **2.13.1/2.14.1**, with PCF targets **2.14.1**.
+`pac solution init --publisher-name XrmTools --publisher-prefix xt` was also
+run in an ignored output directory to verify that this PAC version still
+generates the net462/v4.6.2 solution defaults.
+
+`XrmToolsGetProducerCapability` returns the evaluated producer path only when
+`PowerAppsComponentType=Plugin` (set by Microsoft's plugin targets) and
+`IsPackable!=false`. The solution queries that target on unmarked `.csproj`
+references using the MSBuild task, then joins returned paths to copies of the
+original references. No raw child XML, PackageId heuristic, Build, Pack, output
+scan, or fake output is involved. Projects without the query target return no
+capability through `SkipNonexistentTargets`; errors from existing targets are
+not suppressed. Explicit `XrmToolsPluginPackage=false` opts out; explicit true
+and identity/path/name overrides retain their current precedence.
+
+No reference metadata is added. Only classified references enter the existing
+scoped filter; ordinary/PCF references and their metadata are not changed.
+Recognition requires restored imports: a first restore establishes the real
+graph, and a subsequent capability query is read-only. This is not a new
+restore-time framework repair mechanism.
+
+| Case (both solution versions unless noted) | First boundary/result |
+| --- | --- |
+| Default net462 solution + PAC net48 producer + plain refs, including PCF/ordinary library | NuGet `Restore`/`RestoreTask` reports `NU1201` on the Plugin net48 graph edge. No Build/Pack or ZIP. The failure precedes reference build resolution, Microsoft output processing and packaging; recognition does not fix framework compatibility. |
+| Disposable solution set to net48/v4.8 only, matching the generated producer | Fresh restore succeeds; read-only recognition returns only Plugin. Plain plugin + PCF references build the correct ZIP. No marker, explicit unique name, ReferenceOutputAssembly or replacement consumer opt-in property. |
+| Same compatible solution plus ordinary net462 library with XrmTools.Build and `PackageId=Ordinary.NotAPlugin` | Restore/query succeed; only Plugin is classified. `ProcessCdsProjectReferencesOutputs` calls `GetProjectOutputPath` on the remaining ordinary library and fails `MSB4057`. A Microsoft-only mixed-reference comparison fails at the same target. No ZIP; the library is not silently removed to make the experiment pass. |
+| Microsoft-only compatible plugin + PCF (2.14.1) | Real plugin `GetProjectOutputPath` returns Plugin.dll tagged `PowerAppsComponentType=Plugin`. Microsoft's processing task then fails because no assembly registration configuration exists under `PluginAssemblies`. This is a package producer, not a preconfigured individual-assembly component. |
+
+The compatible-framework test edits **only its disposable solution's** framework
+properties; it is a controlled follow-on to `NU1201`, not a broad global-property
+override, RID change, automatic consumer rewrite, or claim that arbitrary
+framework changes are safe. The checked-in automatic example deliberately retains
+the default net462 solution to reproduce the first failure.
+
+### Package bytes, compilation and custom hooks
+
+For each Microsoft solution version, `eng/test-recognition.py` runs a fresh
+compatible build, unchanged Build, and Build after editing plugin and PCF source.
+Every ZIP embeds exactly the producer's `Plugin.1.0.0.nupkg`; after the edit its
+compiled assembly and embedded package bytes change. The unchanged Build retains
+both assembly bytes and modification time. Solution/plugin metadata is 4.5.6.7,
+independent of producer version 1.0.0. No explicit unique name is needed:
+staging derives `xt_Plugin` from publisher prefix `xt` and validated PackageId.
+
+Hooks installed through ordinary `Directory.Build.targets` observe:
+
+| Hook/adapter per successful Build | Observed count/effect |
+| --- | --- |
+| Scoped filter, Microsoft reference processing, restore | Once each. Before-processing hook sees only PCF; after-restoration hook sees PCF then Plugin. Original Plugin/PCF order is changed by append restoration, as in the marked baseline. A custom reference metadata value added after recognition survives the boundary. |
+| Producer Before/After Pack | Two pairs: Microsoft's `GeneratePackageOnBuild=true` normal Pack, then isolated `NoBuild=true` Pack. The second reports `_XrmToolsPackInvalidated=true`; the normal one does not. |
+| Private NuGet invalidation/discovery | One isolated invalidation per Build; `_GetOutputItemsFromPack` selection/evidence still runs. Recognition is not a package-output or freshness contract. |
+| Read-only recognition after Restore | No producer bin directory, package or Pack hook log; graph retains plugin, ordinary and PCF projects. |
+
+These are representative, explicitly ordered hooks, not proof that arbitrary
+custom hook placement has identical reference visibility. In the mixed failure,
+the restoration AfterTarget does not run; failed in-memory state/recovery remains
+a gate. Repeating fresh CLI invocations does not establish same-session recovery.
 
 ### Implemented baseline behavior and trade-offs
 
@@ -91,10 +165,9 @@ The exact implementation and evidence are in
 
 ## Producer-owned capability and artifact contract
 
-An opt-in producer-owned capability target is a plausible way to distinguish a
-plugin-package producer from an ordinary class library without reading child
-project XML or treating `XrmTools.Build`/`PackageId` as classification. A
-producer can already own the `XrmToolsGetPluginPackageArtifact` target and return
+The recognition artifact implements the capability query described above,
+without treating `XrmTools.Build`/`PackageId` alone as classification. Separately,
+a producer can already own the `XrmToolsGetPluginPackageArtifact` target and return
 one exact path plus `PackageId` and `PackageVersion`. This avoids guessing output
 paths and can avoid the private `_GetOutputItemsFromPack` prediction when the
 target returns complete metadata.
@@ -107,8 +180,9 @@ That is not enough to replace the current adapters:
    `ReferenceOutputAssembly` or a producer capability. A producer-owned package
    artifact target is not called by Microsoft's target. Without filtering, the
    ordinary project output is still sent to Microsoft's output contract; the
-   marker-free probe above demonstrates the missing-target failure for this
-   producer, rather than a safe substitute for current staging.
+   original non-PAC marker-free probe demonstrates a missing-target failure;
+   the real PAC producer instead reaches Microsoft's assembly-registration
+   requirement. Neither supplies the package staging contract.
 2. Discovering capability before that target and omitting only the producer
    output still requires a temporary filter unless Microsoft exposes a supported
    per-reference output-target contract. Replacing Microsoft's target or using a
@@ -132,11 +206,32 @@ contract plus Microsoft's reference-output integration demonstrates otherwise.
 
 ## Entry-point comparison
 
-The prototype packages `Sdk/Sdk.props` and `Sdk/Sdk.targets` in `XrmTools.Build`.
+The default package contains **no** `Sdk/` or recognition asset. The opt-in pack
+options below create separate exact prerelease versions in the local feed:
+
+```sh
+dotnet pack XrmTools.Build.csproj -o artifacts/local-feed
+dotnet pack XrmTools.Build.csproj --no-build -o artifacts/local-feed \
+  -p:XrmToolsPrototypeSdk=true -p:PackageVersion=0.5.0-sdk-prototype
+dotnet pack XrmTools.Build.csproj --no-build -o artifacts/local-feed \
+  -p:XrmToolsPrototypeRecognition=true -p:PackageVersion=0.5.0-recognition
+```
+
+Prototype pack refuses the default package version. Tests inspect all three
+archives, reject SDK/recognition assets in the default, verify the expected
+experimental assets and shared core bytes, and clear only each named experimental
+version from the repository-local cache after repacking. The SDK example pins
+`Sdk="XrmTools.Build/0.5.0-sdk-prototype"`; the recognition example references
+`0.5.0-recognition`. Thus NuGet cannot substitute the default artifact for either.
+
+The SDK experiment packages `Sdk/Sdk.props` and `Sdk/Sdk.targets`.
 They import the exact same `build/XrmTools.Build.props` and
 `build/XrmTools.Build.targets` files; they contain no second execution pipeline.
 The SDK consumer omits the XrmTools `PackageReference`, and neither project
 imports the core twice. Both retain an explicit exact Microsoft package version.
+This wrapper supplies **only import forwarding**: Microsoft package references,
+Common.props/Common.targets imports and project defaults stay in the consumer.
+It does not test a convenience SDK that supplies sensible project defaults.
 
 | Cost | PackageReference | Thin versioned SDK |
 | --- | --- | --- |
@@ -160,11 +255,47 @@ not duplicated here:
 - [`Sdk/Solution.cdsproj`](../examples/entry-points/Sdk/Solution.cdsproj)
 - [`entry-points README`](../examples/entry-points/README.md)
 
-The two examples use the same producer and source-driven PCF project. The
+The two original entry-point examples use the same producer and source-driven PCF project. The
 producer keeps `PackageVersion=2.3.4-beta.1`; the solution version remains an
 independent four-part value. Both examples retain the existing per-reference
 marker solely because this is the current runnable contract. The target desired
-by product direction is proposed, not implemented.
+by product direction is implemented only in the distinct recognition experiment
+with the limitations above.
+
+### Minimal plain-reference consumer (compatible-framework diagnostic)
+
+The complete default-failure example is
+[`automatic/Solution.cdsproj`](../examples/automatic/Solution.cdsproj). For the
+most promising tested configuration, a deliberately net48 solution is:
+
+```xml
+<Project ToolsVersion="15.0" DefaultTargets="Build"
+         xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)/$(MSBuildToolsVersion)/Microsoft.Common.props" />
+  <PropertyGroup>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <TargetFramework>net48</TargetFramework>
+    <RestoreProjectStyle>PackageReference</RestoreProjectStyle>
+    <SolutionRootPath>../Solution/src</SolutionRootPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.PowerApps.MSBuild.Solution" Version="2.14.1" />
+    <PackageReference Include="XrmTools.Build" Version="0.5.0-recognition" PrivateAssets="all" />
+    <ProjectReference Include="Plugin/Plugin.csproj" />
+    <ProjectReference Include="../Control/ExampleControl.pcfproj" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)/Microsoft.Common.targets" />
+</Project>
+```
+
+The PAC producer keeps its Microsoft-generated imports and properties; add only
+`<PackageReference Include="XrmTools.Build" Version="0.5.0-recognition" PrivateAssets="all" />`
+alongside the pinned Microsoft plugin references. No marker or replacement opt-in
+property is added. Full producer XML is linked above. PCF retains its own Microsoft
+package/build setup; it does not need XrmTools.Build. The ordinary-library project
+is present separately so tests can add it with one plain reference and demonstrate
+the preserved Microsoft failure rather than advertising an unbuildable mixed ZIP.
 
 For reproducible consumer restore, pin Microsoft/XrmTools/NBGV package versions
 and check in lock files where supported. The package-only entry point can use
@@ -183,7 +314,7 @@ lock graph; pin its exact version and source independently.
 
 ## Validation and remaining risks
 
-The package-first command `./eng/test-package.sh` passed **59 methods**:
+At reviewed commit `5a22cf9`, `./eng/test-package.sh` passed **59 methods**:
 16 reference/version, 20 artifact, 14 staging, 6 execution, and 3 consumer
 entry-point tests. It covers Restore, Build, repeated Build, Clean/Rebuild,
 Debug/Release and reference configuration mapping, producer Pack/NoBuild, final
@@ -194,6 +325,23 @@ Microsoft processing and all four references after restoration. The SDK and
 PackageReference entry points each built with one core import; editing PCF
 source changed the final ZIP payload. This is CLI evidence only.
 
+Revision checks add five recognition methods (each applicable matrix runs
+2.13.1/2.14.1) and fix the source-preservation regression: each entry-point build
+now captures and compares the bytes of the **disposable fixture's** `Solution.xml`,
+including the PCF edit/rebuild. It no longer hashes the untouched repository copy.
+Exact revision commands/results, final commit and CI links are recorded in the
+PR description. Local versions remain .NET SDK 10.0.403, MSBuild 18.9.15.52412,
+Python 3.9.6, Node 22.4.0 and npm 10.8.1. CLI support evidence is limited to the
+tested Microsoft versions/hosts; desktop VS, other SDK versions, static graph,
+design-time and Dataverse import/upgrade are not certified.
+
+The revision's canonical validation/commit record is
+[PR #5](https://github.com/rezanid/XrmTools.Build/pull/5); its description records
+the final pushed SHA and exact Windows/macOS run links so this document does not
+embed a self-referential commit hash. The baseline reviewed commit's
+[Windows/macOS CI](https://github.com/rezanid/XrmTools.Build/actions/runs/42908863780)
+passed, but is not validation of the revision.
+
 CLI results do not prove Visual Studio target scheduling, NuGet UI behavior,
 VS-MSBuild restore source parity, or same-session recovery. These remain pending.
 Test the VS-specific questions separately from `.cdsproj` loading, which is
@@ -203,42 +351,31 @@ already available through Xrm Tools.
 
 | Surface | Baseline | Prototype result |
 | --- | --- | --- |
-| Solution entry point | `XrmTools.Build` PackageReference imports the core. | Same PackageReference plus a thin SDK wrapper importing the same core; SDK is optional and not recommended as the default. |
-| Producer selection and Microsoft output processing | Explicit marker plus temporary reference filter/restore. | Unchanged; marker-free real-target probe fails, so the proposed capability contract is not adopted. |
+| Solution entry point | `XrmTools.Build` PackageReference imports the core. | Same PackageReference. A separate SDK artifact forwards the same imports; it is not included in the default package and not recommended as the default. |
+| Producer selection and Microsoft output processing | Explicit marker plus temporary reference filter/restore. | Distinct experimental package recognizes Microsoft plugin capability with plain refs; same scoped filter/restore remains. Default net462/net48 restore and ordinary-library output limitations remain visible. |
 | Package freshness | Isolated Pack invocation with private NuGet invalidation. | Unchanged; exact producer path does not prove freshness or remove forced Pack. |
 | PCF evidence | Mixed-reference test fixture packages a prebuilt payload. | Separate source-driven consumer example proves source edits change the final ZIP payload through Microsoft PCF targets; not official `pcf-scripts` compilation. |
 | Validation and maintenance | Package-first tests exercise current adapters and final ZIP validation. | Adds two entry-point regressions and the source-driven PCF check; runtime execution pipeline is shared, with SDK resolution and wrapper maintenance as new optional costs. |
 
 ### Manual Visual Studio gate for Reza
 
-Use a disposable Windows checkout with the intended Visual Studio version,
-NuGet tooling and Xrm Tools extension. Capture VS/MSBuild and Microsoft solution
-package versions in the result.
+`.cdsproj` loading through Xrm Tools is solved; do not retest it as the blocker.
+In a disposable Windows checkout, pack `0.5.0-recognition`, configure that local
+feed, and use the explicit net48 solution above with the PAC net48 producer.
+Install XrmTools.Build **through NuGet UI** on both projects (record whether it
+creates PackageReference or packages.config), add producer and PCF through
+ordinary **Add Project Reference**, and build from clean outputs. Edit plugin
+code and PCF source, rebuild, then induce a reference-output failure by adding
+the ordinary library; remove that reference and retry in the **same VS session**
+without reload. Do not add marker/ReferenceOutputAssembly metadata to rescue it.
 
-1. Open both example solutions. In NuGet UI, add the exact XrmTools and Microsoft
-   packages to the PackageReference project; record whether the UI creates
-   `<PackageReference>` or `packages.config`. For the SDK example, restore the
-   exact SDK package from the configured feed before build.
-2. Add the producer and PCF projects using **Add Project Reference**. Build the
-   runnable marked example first. Then remove only `XrmToolsPluginPackage=true`
-   in a disposable copy and build again. Record reference visibility before and
-   after `ProcessCdsProjectReferencesOutputs`, errors, build/Pack counts, and
-   whether an ordinary class library stays excluded.
-3. Build Debug and Release twice, change producer source and package identity/
-   version, and edit `Control/src/index.js`. Verify compile/package counts,
-   independent NuGet versions, changed PCF bundle bytes, final ZIP contents and
-   exact nested package bytes. Run Clean and Rebuild; compare `dotnet` and VS
-   restore source/asset behavior without editing project XML automatically.
-4. Enable representative custom BeforeTargets/AfterTargets hooks that log order,
-   invocation count and visible references. Force one reference-output failure,
-   then remove the failure property and rebuild in the same VS session/project
-   context. Record whether state recovers without closing/reloading the project.
-5. Capture VS output/error logs, an MSBuild binlog if available, package/project
-   assets, ZIP listing plus hashes of embedded `.nupkg` and PCF files, and hashes
-   of source manifests before/after. Do not infer this evidence from CLI runs.
-
-Expected baseline behavior: the marked project succeeds; the marker-free copy
-is **not** expected to prove the desired contract and must be recorded as a
-limitation. The PCF bundle must reflect the edited source. No success claim is
-made for NuGet UI, restore-host equivalence, custom hook compatibility or
-same-session recovery until this procedure passes on desktop VS.
+Capture VS/NuGet/MSBuild/package versions, output log/binlog and restore assets.
+Inspect capability classification, first failing target if any, filtered/restored
+reference order and two Pack pairs (one isolated) per successful Build; the
+unchanged build must not recompile the producer. Inspect final ZIP
+`pluginpackages/xt_Plugin/package/xt_Plugin.nupkg` byte-for-byte against the producer
+package, metadata version, changed PCF bundle, and unchanged source Solution.xml.
+Record whether retry recovered; an old ZIP after failure is not success.
+The checked-in JavaScript PCF script proves CLI source scheduling only. Repeat
+the source-edit step with an actual PAC TypeScript/pcf-scripts control before
+claiming real PCF/VS scheduling support. All these desktop gates remain pending.
