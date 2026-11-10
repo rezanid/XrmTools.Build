@@ -140,7 +140,7 @@ namespace XrmTools.Build.Tasks
         private static string Absolute(string path, string directory) =>
             Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(directory, path));
 
-        private static (string Id, string Version) ReadIdentity(Stream stream)
+        internal static (string Id, string Version) ReadIdentity(Stream stream)
         {
             using (var reader = XmlReader.Create(stream, new XmlReaderSettings
             {

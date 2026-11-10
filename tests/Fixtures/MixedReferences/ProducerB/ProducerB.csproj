@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <Import Project="../Producer.props" />
   <ItemGroup>
-    <PackageReference Include="XrmTools.Build" Version="0.3.0-phase4.1" PrivateAssets="all" />
+    <PackageReference Include="XrmTools.Build" Version="0.4.0-phase5" PrivateAssets="all" />
   </ItemGroup>
 </Project>
