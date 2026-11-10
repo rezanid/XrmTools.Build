@@ -6,8 +6,8 @@ Phase 4 adds producer Pack and exact artifact validation, not plugin metadata
 creation or solution staging. Microsoft still owns the final solution ZIP.
 `XTB2005` warns that discovered producer packages are not yet included in it.
 The Phase 3 classification/Returns contract and all per-reference metadata remain
-intact. No additional ProjectReference mutation or producer import injection is
-introduced.
+intact. No additional ProjectReference mutation is introduced. A review correction
+adds an isolated producer import for Pack only; no project file is rewritten.
 
 The installed .NET SDK 10.0.403 `NuGet.Build.Tasks.Pack.targets` was inspected and
 exercised with real packs and diagnostic logs/binlogs. `_GetOutputItemsFromPack`:
@@ -52,9 +52,56 @@ any dimension-dependent producer dependencies.
 The extension never sets Version, FileVersion or PackageVersion. It removes its
 solution-version properties from the pack/query calls rather than mapping them
 to producer versions. It does not set PackageOutputPath. GeneratePackageOnBuild
-may cause Pack to have already run during Build; a later Pack call can be
-incremental, but no additional single-target Build is requested. Multi-target and
-GeneratePackageOnBuild fixtures verify build counts.
+may cause Pack to have already run during Build. The isolated Pack invocation
+deliberately regenerates the package, but no additional single-target Build is
+requested. Multi-target and GeneratePackageOnBuild fixtures verify build counts.
+
+### Review correction: repeat builds without timestamp heuristics
+
+The original XTB3007 timestamp test was too strict: ordinary NuGet incremental
+Pack can correctly reuse an existing package. Simply removing it would also
+accept a stale package and stale generated nuspec after a custom naming change.
+Neither current write time nor a matching pair of old files establishes correctness.
+
+The correction uses a private producer copy and `PreparePackAdapter`:
+
+- Evaluate the producer with the pack call's build dimensions using the host
+  MSBuild API, not raw `.csproj` parsing. Preserve existing
+  CustomAfterMicrosoftCommonTargets/CustomAfterMicrosoftCommonCrossTargetingTargets
+  imports by chaining their evaluated paths. Only the NoBuild pack/query instance
+  receives the packaged `ProducerPackAdapter.targets`; normal reference builds,
+  restore, source files, and Phase 3's classification/filtering are unchanged.
+- For NuGet producers, add a unique **nonexistent input item** after
+  `_CalculateInputsOutputsForPack`. Under the verified NuGet target contract,
+  GenerateNuspec cannot be incrementally skipped when an input is missing. This
+  uses NuGet's input item list, not a replacement of GenerateNuspec, a timestamp
+  comparison, an output-file deletion/touch, or an output-directory change.
+  The sentinel is never created and no directory scan is performed.
+- Capture evaluated PackageId/PackageVersion, NuspecFile,
+  OutputFileNamesWithoutVersion, IsPackable, ContinuePackingAfterGeneratingNuspec
+  and invalidation evidence after Pack. Automatic discovery requires that evidence
+  and ordinary naming, exactly one predicted primary package, and actual ZIP
+  identity matching the **current evaluated** ID/version, not a stale generated
+  nuspec. Unsupported custom/versionless naming is rejected even when an old
+  computed path still exists or has a future timestamp.
+
+This intentionally sacrifices Pack incrementality, not compile incrementality.
+Two consecutive unchanged `dotnet build` invocations work automatically. Changed
+payload bytes (even with unchanged size/time), changed compiled source, changed
+imported PackageId, GeneratePackageOnBuild, and future-dated stale payloads have
+regressions. A second pack may occur when GeneratePackageOnBuild already packed
+during normal Build. That extra packaging cost is preferable to accepting an
+artifact whose provenance the internal target cannot establish.
+
+The guarantee depends on the verified standard NuGet target/input contract.
+Arbitrary replacement Pack/GenerateNuspec implementations, concurrent writes to
+the same producer output, or hooks that deliberately undo input invalidation are
+not certified. The producer's build code is trusted, not a sandbox. Custom Pack
+can still use explicit-path/producer-return contracts. No guarantee is claimed
+that a malicious/custom Pack produced bytes from current source. Existing import
+hook paths are chained in single- and multi-target fixtures, but unusual hooks
+that change their own import selection or depend on global-hook identity need
+separate interoperability verification.
 
 ## Selection and validation contracts
 
@@ -81,24 +128,22 @@ renamed legacy symbols archive that lacks identifying metadata.
 
 Expected identity comes from reference metadata
 `XrmToolsPluginPackageId`/`XrmToolsPluginPackageVersion`, otherwise the selected
-producer return item's `PackageId`/`PackageVersion`. For the internal adapter,
-read the one reported **primary** generated nuspec (not `.symbols.nuspec`).
-An explicit path without expected metadata can use that generated nuspec too.
+producer return item's `PackageId`/`PackageVersion` when that target selected the
+artifact. For the internal adapter, use current evaluated producer metadata.
+An explicit path never uses identity from unrelated lower-priority return items;
+the producer return target is not invoked at all. Missing explicit ID/version
+can be supplied by consistent evaluated adapter identity with ordinary producer
+naming, regardless of conflicting paths or the number of lower-priority outputs.
+Custom nuspec identity is not inferred from old generated nuspecs.
 Missing expected identity fails; an explicit path does not disable validation.
 IDs compare case-insensitively. NuGet.Versioning compares normalized NuGet
 versions with VersionRelease semantics: prerelease is significant, build metadata
 is not, and e.g. 1.2 and 1.2.0 represent the same package version.
 
-The adapter additionally requires the exact selected file's write time to be
-within this discovery/build invocation. Otherwise XTB3007 fails closed: without
-a producer-side public contract it cannot distinguish an intentional incremental
-reuse from stale same-identity output after a custom nuspec/naming change.
-This is **not** a newest-file algorithm. No other files are considered. Repeated
-incremental packs and filesystems with coarse timestamps/clock skew may require
-one of the explicit contracts below. No user artifact is deleted/touched to
-force freshness. Explicit contracts authorize reuse but still run Pack and
-verify existence, package shape, and expected identity/version. They do not prove
-byte-for-byte correspondence to current producer source if Pack itself lies.
+No artifact age test is used. XTB3007 now means missing/unsupported automatic
+pack evidence, disabled packaging, or custom/versionless naming; it does not
+reject an ordinary second build. Explicit contracts still run Pack and verify
+existence, package shape and expected identity/version.
 
 ## Producer-return example
 
@@ -167,7 +212,8 @@ It does not write pluginpackage.xml or stage/copy the file into a solution.
 | XTB3004 | Expected identity/version unavailable; supply explicit metadata or fix the producer contract |
 | XTB3005 | Invalid/unreadable ZIP or nuspec, or symbols metadata |
 | XTB3006 | Actual nuspec identity/version differs from expected |
-| XTB3007 | Internal adapter selected unchanged pre-existing output; explicit reuse contract required |
+| XTB3007 | Automatic pack evidence missing/unsupported, packaging disabled, or unsupported custom/versionless naming |
+| XTB3008 | Producer evaluation/isolated adapter preparation failed |
 
 ## Validation matrix and remaining integration risks
 
@@ -185,10 +231,17 @@ producer packages yet). Fixtures preserve source XML hashes.
 | OutputFileNamesWithoutVersion; literal/substituted custom nuspec | Installed adapter fails clearly; producer-return and exact-path fallbacks succeed |
 | Multi-target net462/netstandard2.0; GeneratePackageOnBuild | Correct primary artifact and one Build record per framework |
 | Missing Pack/internal adapter, IsPackable=false, missing/ambiguous/mismatched/corrupt outputs | Actionable XTB3000-XTB3006 failures; explicit identity fallback for custom Pack |
-| Stale computed package and nuspec; newer unrelated packages | No stale/default or newest-file fallback; XTB3007 for unchanged internal selection |
+| Repeated unchanged dotnet builds, with/without GeneratePackageOnBuild | Both builds succeed automatically with both Microsoft versions; no extra compilation |
+| Changed payload with preserved size/time, changed compiled source and PackageId | New exact package content/identity validated; no timestamp-only proof |
+| Stale computed package/nuspec, future-dated stale payloads; newer unrelated packages | Regenerate ordinary packages; reject incorrect custom/versionless predictions; no newest-file fallback |
+| Explicit path vs conflicting/ambiguous/failing producer return | Explicit choice remains authoritative; missing identity uses current evaluated metadata or XTB3004 |
+| Existing common/cross-targeting import hooks | Preserved in the isolated Pack instance |
 | Malformed XML/DTD, symbol nuspec type, version normalization | Compiled-task tests through the packaged MSBuild assembly |
 | Phase 3 failed Microsoft output target | Same failed instance retains two unmarked references; fresh invocation restores all four and discovers two packages |
 
+The review-correction package-first run passed all **35 test methods** locally
+(15 version/reference methods and 20 artifact methods), including actual repeated
+`dotnet build` calls and final ZIP inspection.
 Verified locally on macOS arm64, .NET SDK 10.0.403/MSBuild 18.9.15. Windows and macOS
 dotnet CI is defined in `.github/workflows/build.yml`; a workflow definition alone
 is not evidence that a particular hosted run passed.
@@ -203,7 +256,7 @@ imports remain separate compatibility gates. The Python suites also accept
 `XRMTOOLS_MSBUILD_PATH` to exercise a desktop MSBuild executable after packing the
 local package; that mode is not locally validated.
 
-The Phase 3 scoped adapter is intentionally unchanged except for its warning text.
+The Phase 3 scoped adapter is intentionally unchanged by the review correction.
 Other reference-boundary hooks may see a filtered list; successful restoration
 appends marked items. The failure test proves that AfterTargets restoration does
 not execute on failure, even if a caller continues; reusing that failed project
@@ -217,7 +270,13 @@ NuGet versions across core/desktop runtimes. `tools/netstandard2.0` therefore
 contains a small validator plus NuGet.Versioning, and a metadata-only task that
 joins resolved build dimensions onto private producer copies. MSBuild framework
 and utility assemblies are build-time references only and are supplied at runtime
-by the host. The ordinary NuGet package declares **no consumer dependencies**;
+by the host. The isolated-adapter preparation task requires MSBuild's evaluation
+API, which has no current netstandard2.0 reference assembly. It is built separately
+for net8.0/core and net472/desktop under `tools/`, with MSBuild runtime assemblies
+supplied by the host rather than redistributed. Producer discovery therefore
+requires .NET 8+ core MSBuild or compatible desktop MSBuild 17.8+; desktop execution
+remains unverified by the dotnet CI matrix. The ordinary NuGet package declares
+**no consumer dependencies**;
 no packages/items are added from imported targets, no buildTransitive assets are
 shipped, and no shell/Python process is needed by consumers. The redistributed
 NuGet.Versioning binary's Apache-2.0 license/attribution is included under licenses.

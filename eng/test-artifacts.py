@@ -4,6 +4,7 @@
 import importlib.util
 from pathlib import Path
 import os
+import subprocess
 import unittest
 import xml.etree.ElementTree as ET
 import zipfile
@@ -73,6 +74,75 @@ class ArtifactIntegration(unittest.TestCase):
                 self.assertEqual(records, [f"{DEFAULT_ID}|2.3.4-preview.5|{DEFAULT_VERSION}|6.7.8.0|Release|Artifact"])
                 self.assertEqual(len((producer / "obj/pack-count.txt").read_text().splitlines()), 1)
                 self.assertFalse(list((producer / "bin/Release").glob("*.nupkg")))
+
+    def test_two_unchanged_dotnet_builds_and_changed_payload(self):
+        for microsoft in ("2.13.1", "2.14.1"):
+            for generate_on_build in (False, True):
+                with self.subTest(microsoft=microsoft, generate_on_build=generate_on_build):
+                    project, producer = make_fixture("repeat-build")
+                    properties = {"FixtureMicrosoftVersion": microsoft,
+                                  "FixtureGenerateOnBuild": str(generate_on_build).lower(),
+                                  "XrmToolsSolutionVersion": "9.8.7.6",
+                                  "RestoreAdditionalProjectSources": targets.FEED}
+                    path = producer / f"bin/Release/{DEFAULT_ID}.{DEFAULT_VERSION}.nupkg"
+                    payload = producer / "payload.txt"
+                    original = payload.read_bytes()
+                    compiled = producer / "bin/Release/net462/ArtifactProducer.dll"
+                    compiled_before = None
+                    for iteration in range(4):
+                        if iteration == 2:
+                            # Same-size, preserved-time content change cannot be proved by timestamps.
+                            old_time = payload.stat().st_mtime_ns
+                            payload.write_bytes(original.replace(b"Custom", b"Newest"))
+                            os.utime(payload, ns=(old_time, old_time))
+                        if iteration == 3:
+                            (producer / "ChangedInput.cs").write_text(
+                                'public static class ChangedInput { public const string Value = "new source"; }')
+                        result = subprocess.run(
+                            ["dotnet", "build", str(project), "-v:diagnostic", *parameters(properties)],
+                            env=targets.ENV, cwd=project.parent, capture_output=True, text=True)
+                        output = result.stdout + result.stderr
+                        log = RUN / f"repeat-{microsoft}-{generate_on_build}-{iteration}-{len(list(RUN.iterdir()))}.log"
+                        log.write_text(output)
+                        self.assertEqual(result.returncode, 0, f"See {log}\n{output[-3000:]}")
+                        self.assertIn(f"validated plugin artifact '{path}", output)
+                        self.assertIn('Target "_XrmToolsInvalidateIncrementalPack:', output)
+                        self.assertIn('Task "PackTask"', output)
+                        self.assertNotIn("XTB3007", output)
+                        with zipfile.ZipFile(path) as package:
+                            self.assertEqual(package.read("content/payload.txt"), payload.read_bytes())
+                            metadata = ET.fromstring(package.read(f"{DEFAULT_ID}.nuspec")).find("{*}metadata")
+                            self.assertEqual(metadata.findtext("{*}id"), DEFAULT_ID)
+                            self.assertEqual(metadata.findtext("{*}version"), DEFAULT_VERSION)
+                            self.assertEqual(package.read("lib/net462/ArtifactProducer.dll"), compiled.read_bytes())
+                        current = (compiled.stat().st_mtime_ns, targets.digest(compiled))
+                        if iteration == 3:
+                            self.assertNotEqual(current[1], compiled_before[1], "Changed code was not rebuilt/packed")
+                        elif compiled_before is not None:
+                            self.assertEqual(current, compiled_before, "Packaging rebuilt unchanged compiled code")
+                        compiled_before = current
+                    # A changed imported PackageId must not return the old, still-valid package.
+                    props = producer / "Directory.Build.props"
+                    props.write_text(props.read_text().replace("Computed.", "Changed."))
+                    changed = discover(project, {"FixtureGenerateOnBuild": str(generate_on_build).lower()})
+                    self.assert_artifact(changed, producer / f"bin/Release/Changed.ArtifactProducer.{DEFAULT_VERSION}.nupkg",
+                                         package_id="Changed.ArtifactProducer")
+                    self.assertTrue(path.exists())
+
+    def test_automatic_pack_replaces_stale_same_identity_payload_without_timestamp_evidence(self):
+        project, producer = make_fixture("stale-payload")
+        path = producer / f"bin/Release/{DEFAULT_ID}.{DEFAULT_VERSION}.nupkg"
+        self.assert_artifact(discover(project, {}), path)
+        with zipfile.ZipFile(path) as package:
+            contents = {entry.filename: package.read(entry) for entry in package.infolist()}
+        contents["content/payload.txt"] = b"stale-but-identically-versioned payload"
+        with zipfile.ZipFile(path, "w") as package:
+            for name, content in contents.items():
+                package.writestr(name, content)
+        os.utime(path, (2000000000, 2000000000))
+        self.assert_artifact(discover(project, {}), path)
+        with zipfile.ZipFile(path) as package:
+            self.assertEqual(package.read("content/payload.txt"), (producer / "payload.txt").read_bytes())
 
     def test_nbgv_producer_independent_version(self):
         project, producer = make_fixture("nbgv")
@@ -190,8 +260,8 @@ class ArtifactIntegration(unittest.TestCase):
         # Switching to a custom nuspec can leave a perfectly valid old default package.
         # Both that package and its generated nuspec match the adapter's computed names.
         # The adapter must not silently return them.
-        old = 946684800
-        os.utime(path, (old, old))
+        future = 2000000000
+        os.utime(path, (future, future))
         output = discover(project, {"FixtureCustomNuspec": "true"}, success=None)
         current = producer / "bin/Release/Literal.CustomProducer.3.4.5-rc.1.nupkg"
         self.assertTrue(current.exists())
@@ -200,6 +270,52 @@ class ArtifactIntegration(unittest.TestCase):
             self.assert_artifact(state, current, "Literal.CustomProducer", "3.4.5-rc.1")
         else:
             self.assertIn("XTB3007", output)
+
+    def test_versionless_naming_rejects_stale_computed_path(self):
+        project, producer = make_fixture("stale-versionless")
+        path = producer / f"bin/Release/{DEFAULT_ID}.{DEFAULT_VERSION}.nupkg"
+        self.assert_artifact(discover(project, {}), path)
+        os.utime(path, (2000000000, 2000000000))
+        failure = discover(project, {"FixtureVersionless": "true"}, success=False)
+        self.assertIn("XTB3007", failure)
+        self.assertTrue((producer / f"bin/Release/{DEFAULT_ID}.nupkg").exists())
+
+    def test_explicit_path_ignores_conflicting_ambiguous_and_failing_return_target(self):
+        project, producer = make_fixture("explicit-precedence")
+        path = producer / f"bin/Release/{DEFAULT_ID}.{DEFAULT_VERSION}.nupkg"
+        properties = {
+            "FixtureArtifactPath": str(path),
+            "FixtureReturnedPaths": "conflicting.nupkg",
+            "FixtureContractId": "Conflicting.Identity",
+            "FixtureContractVersion": "0.0.1",
+            "FixtureAmbiguousReturn": "true",
+            "FixtureFailReturn": "true",
+        }
+        for metadata in ({}, {"FixtureExpectedId": DEFAULT_ID}, {"FixtureExpectedVersion": DEFAULT_VERSION},
+                         {"FixtureExpectedId": DEFAULT_ID, "FixtureExpectedVersion": DEFAULT_VERSION}):
+            with self.subTest(metadata=metadata):
+                self.assert_artifact(discover(project, {**properties, **metadata}), path, source="ExplicitPath")
+
+    def test_existing_producer_import_hooks_are_chained_for_both_build_shapes(self):
+        for multi in (False, True):
+            with self.subTest(multi=multi):
+                project, producer = make_fixture("producer-hooks")
+                props = producer / "Directory.Build.props"
+                document = ET.parse(props)
+                group = document.getroot().find("PropertyGroup")
+                for name, file in (("CustomAfterMicrosoftCommonTargets", "after-common.targets"),
+                                   ("CustomAfterMicrosoftCommonCrossTargetingTargets", "after-cross.targets")):
+                    ET.SubElement(group, name).text = f"$(MSBuildProjectDirectory)/{file}"
+                    (producer / file).write_text(
+                        f'<Project><Target Name="FixtureHook{file.replace("-", "").replace(".", "")}" BeforeTargets="Pack">'
+                        f'<WriteLinesToFile File="$(BaseIntermediateOutputPath)hook-{file}.txt" Lines="preserved" Overwrite="true"/>'
+                        '</Target></Project>')
+                document.write(props)
+                arguments = {"FixtureMultiTarget": str(multi).lower()}
+                state = discover(project, arguments)
+                self.assert_artifact(state, producer / f"bin/Release/{DEFAULT_ID}.{DEFAULT_VERSION}.nupkg")
+                self.assertEqual((producer / f"obj/hook-after-{'cross' if multi else 'common'}.targets.txt").read_text().strip(),
+                                 "preserved")
 
     def test_explicit_override_validation_and_generated_identity(self):
         project, producer = make_fixture("override")
@@ -308,9 +424,10 @@ class ArtifactValidation(unittest.TestCase):
         project.write_text(
             f'<Project><UsingTask TaskName="XrmTools.Build.Tasks.ValidateArtifact" AssemblyFile="{assembly}"/>'
             '<ItemGroup><Producer Include="producer.csproj" XrmToolsPluginPackagePath="exact.nupkg" '
-            'XrmToolsPluginPackageId="Test.Package" XrmToolsPluginPackageVersion="1.2.0+build"/></ItemGroup>'
+            'XrmToolsPluginPackageId="Test.Package" XrmToolsPluginPackageVersion="1.2.0+build"/>'
+            '<Lower Include="conflicting.nupkg;ambiguous.nupkg" PackageId="Wrong" PackageVersion="0.0.1"/></ItemGroup>'
             '<Target Name="Check"><XrmTools.Build.Tasks.ValidateArtifact Producer="@(Producer)" '
-            'SolutionDirectory="$(MSBuildProjectDirectory)"/></Target></Project>')
+            'ContractOutputs="@(Lower)" AdapterOutputs="@(Evidence)" SolutionDirectory="$(MSBuildProjectDirectory)"/></Target></Project>')
         cases = [
             ('<package><metadata><id>test.package</id><version>1.2</version></metadata></package>', None),
             ('<package><metadata><id>Other</id><version>1.2.0</version></metadata></package>', "XTB3006"),
@@ -338,6 +455,27 @@ class ArtifactValidation(unittest.TestCase):
                 self.assertIn("XTB3005", msbuild(project, "-t:Check", success=False, label="nuspec-count"))
         artifact.write_bytes(b"not a zip")
         self.assertIn("XTB3005", msbuild(project, "-t:Check", success=False, label="corrupt-zip"))
+        with zipfile.ZipFile(artifact, "w") as archive:
+            archive.writestr("Test.Package.nuspec",
+                             "<package><metadata><id>Test.Package</id><version>1.2.0</version></metadata></package>")
+        project.write_text(project.read_text().replace('XrmToolsPluginPackageVersion="1.2.0+build"',
+                                                      'XrmToolsPluginPackageVersion=""'))
+        output = msbuild(project, "-t:Check", success=False, label="explicit-missing-metadata")
+        self.assertIn("XTB3004", output)
+        self.assertNotIn("XTB3001", output)
+        document = ET.parse(project)
+        group = ET.SubElement(document.getroot(), "ItemGroup")
+        for path in ("unrelated-one.nupkg", "unrelated-two.nupkg"):
+            ET.SubElement(group, "Evidence", {
+                "Include": path, "XrmToolsEvaluatedPackageId": "Test.Package",
+                "XrmToolsEvaluatedPackageVersion": "1.2.0",
+            })
+        document.write(project)
+        msbuild(project, "-t:Check", label="explicit-ambiguous-paths-unambiguous-identity")
+        group[-1].set("XrmToolsEvaluatedPackageVersion", "9.9.9")
+        document.write(project)
+        output = msbuild(project, "-t:Check", success=False, label="explicit-ambiguous-identity")
+        self.assertIn("XTB3004", output)
 
 
 if __name__ == "__main__":

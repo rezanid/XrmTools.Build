@@ -25,7 +25,9 @@ if cache.exists():
 with zipfile.ZipFile(root / "artifacts/local-feed/XrmTools.Build.0.3.0-phase4.1.nupkg") as package:
     required = {"build/XrmTools.Build.props", "build/XrmTools.Build.targets",
                 "build/targets/PluginPackageReferences.targets", "build/targets/PluginPackageArtifacts.targets",
+                "build/targets/ProducerPackAdapter.targets",
                 "tools/netstandard2.0/XrmTools.Build.Tasks.dll", "tools/netstandard2.0/NuGet.Versioning.dll",
+                "tools/net8.0/XrmTools.Build.AdapterTasks.dll", "tools/net472/XrmTools.Build.AdapterTasks.dll",
                 "docs/architecture.md", "docs/artifact-discovery.md", "licenses/NuGet.Versioning.txt"}
     assert required <= set(package.namelist()), required - set(package.namelist())
     assert not any(name.startswith(("lib/", "buildTransitive/")) for name in package.namelist())

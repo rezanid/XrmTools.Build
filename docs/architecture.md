@@ -189,7 +189,7 @@ absent and warned about. It is not plugin XML/import validation.
 
 See [artifact-discovery.md](artifact-discovery.md) for the investigated NuGet
 adapter behavior, execution order, producer-return and explicit-path contracts,
-compiled-task justification, diagnostic codes, freshness rules, and complete
+compiled-task justification, diagnostic codes, pack-execution evidence, and complete
 test matrix. Discovery processes classified items and private copies only; the
 Phase 3 ProjectReference adapter receives no additional mutations.
 
@@ -198,9 +198,12 @@ build so all package TFMs exist, followed by Pack with NoBuild=true. Producer
 configuration/platform/AdditionalProperties and independent NuGet versions remain
 intact. A small netstandard2.0 task checks the exact ZIP's nuspec against expected
 NuGet identity/version, rather than trusting predicted filenames. The internal
-adapter fails closed on unchanged files to avoid accepting stale same-identity
-artifacts after custom nuspec changes; explicit contracts support intentional
-incremental reuse.
+adapter forces the isolated NuGet packaging target to execute while leaving
+compilation incremental, and validates against current evaluated identity.
+This fixes repeated builds without trusting timestamps or stale generated
+nuspecs. A temporary producer-only import chains existing custom import hooks;
+it changes no source files or ProjectReference items. Unsupported custom
+nuspec/versionless predictions still require explicit contracts.
 
 The failure-recovery test covers both Microsoft solution versions. A deliberately
 failed reference-output target leaves marked references filtered in a reused

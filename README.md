@@ -130,12 +130,16 @@ The selected ZIP's nuspec must match the expected identity/version, and symbols
 packages are excluded. Explicit paths are solution-relative; producer-returned
 paths are producer-relative (absolute paths work in both).
 
-**The internal adapter is best-effort, not a public NuGet contract.** In the
-installed SDK it miscomputes versionless/custom-nuspec paths. It also rejects
-unchanged pre-existing files because it cannot distinguish incremental reuse
-from stale output after a naming change. Use a producer return contract or an
-explicit path for intentional reuse and unusual naming. Those still run Pack
-and validate identity/version; they do not bypass errors.
+**The internal adapter is best-effort, not a public NuGet contract.** An isolated
+producer import forces NuGet packaging to execute, with `NoBuild=true`, and returns
+evaluated identity/naming settings alongside its predicted paths. Normal unchanged
+builds therefore succeed without an explicit contract; compilation remains
+incremental, but producer packaging is deliberately regenerated. No timestamp is
+used as artifact proof. Versionless/custom-nuspec naming still requires a producer
+return contract or exact path, because the installed internal target can predict
+incorrect paths. Explicit paths are authoritative and do not probe lower-priority
+producer-return targets; missing expected metadata must come from unambiguous
+evaluated producer identity or be supplied explicitly.
 
 See [artifact discovery](docs/artifact-discovery.md) for executable fallback
 examples, expected-identity metadata, diagnostics, and the tested matrix.
@@ -162,6 +166,9 @@ tests after that local package has been built and restored.
 `python3 eng/test-artifacts.py` exercises Phase 4, including custom nuspecs,
 versionless output, symbols, NBGV, multi-target builds, invalid/ambiguous/missing
 artifacts, and Phase 3 failure recovery.
+The review-correction suite contains 35 test methods, including repeated actual
+`dotnet build` calls with changed code/payloads, and passes locally on the tooling
+below. Hosted correction results are recorded with the pull request.
 
 The extension depends on Microsoft's `CopyCdsSolutionContent`,
 `ProcessCdsProjectReferencesOutputs`, `PowerAppsPackage`, and
@@ -177,7 +184,7 @@ range; changed/missing target definitions still require compatibility investigat
 | .NET SDK 10.0.403 / MSBuild 18.9.15 on macOS arm64 | Real packaging passed with Microsoft solution packages 2.13.1 and 2.14.1, and PCF package 2.14.1; not a broad platform certification |
 | Visual Studio MSBuild on Windows | Not yet tested |
 | Linux; IDE design-time/static-graph builds; other Microsoft versions | Not yet tested |
-| GitHub Actions / .NET 10.0.x on Windows and macOS | Package-first suite and all 30 test methods passed in [run 42715091002](https://github.com/rezanid/XrmTools.Build/actions/runs/42715091002), including both Microsoft solution versions |
+| GitHub Actions / .NET 10.0.x on Windows and macOS | Initial Phase 4 package-first suite and all 30 then-existing test methods passed in [run 42715091002](https://github.com/rezanid/XrmTools.Build/actions/runs/42715091002), including both Microsoft solution versions; review corrections expand this to 35 methods |
 | Azure DevOps | Not yet tested |
 | Dataverse import or upgrade | Not tested; a successfully packaged ZIP does not prove that replacing an existing server-side plugin package is supported |
 

@@ -3,16 +3,15 @@
              AssemblyFile="$(MSBuildThisFileDirectory)../../tools/netstandard2.0/XrmTools.Build.Tasks.dll" />
   <UsingTask TaskName="XrmTools.Build.Tasks.ValidateArtifact"
              AssemblyFile="$(MSBuildThisFileDirectory)../../tools/netstandard2.0/XrmTools.Build.Tasks.dll" />
-
-  <Target Name="_XrmToolsRecordDiscoveryStart" BeforeTargets="PrepareForBuild"
-          Condition="'$(MSBuildProjectExtension)' == '.cdsproj'">
-    <PropertyGroup>
-      <_XrmToolsDiscoveryStartedUtcTicks>$([System.DateTime]::UtcNow.Ticks)</_XrmToolsDiscoveryStartedUtcTicks>
-    </PropertyGroup>
-  </Target>
+  <PropertyGroup>
+    <_XrmToolsAdapterRuntime Condition="'$(MSBuildRuntimeType)' == 'Core'">net8.0</_XrmToolsAdapterRuntime>
+    <_XrmToolsAdapterRuntime Condition="'$(MSBuildRuntimeType)' != 'Core'">net472</_XrmToolsAdapterRuntime>
+  </PropertyGroup>
+  <UsingTask TaskName="XrmTools.Build.Tasks.PreparePackAdapter"
+             AssemblyFile="$(MSBuildThisFileDirectory)../../tools/$(_XrmToolsAdapterRuntime)/XrmTools.Build.AdapterTasks.dll" />
 
   <Target Name="_XrmToolsPreparePluginProducers"
-          DependsOnTargets="_XrmToolsRecordDiscoveryStart;XrmToolsGetPluginPackageProjects;ResolveProjectReferences">
+          DependsOnTargets="XrmToolsGetPluginPackageProjects;ResolveProjectReferences">
     <XrmTools.Build.Tasks.PrepareProducers Producers="@(XrmToolsPluginPackageProject)"
                                          ResolvedReferences="@(_MSBuildProjectReferenceExistent)">
       <Output TaskParameter="Prepared" ItemName="_XrmToolsProducer" />
@@ -28,6 +27,7 @@
       <_XrmToolsContractOutput Remove="@(_XrmToolsContractOutput)" />
       <_XrmToolsAdapterOutput Remove="@(_XrmToolsAdapterOutput)" />
       <_XrmToolsFrameworks Remove="@(_XrmToolsFrameworks)" />
+      <_XrmToolsPackProducer Remove="@(_XrmToolsPackProducer)" />
     </ItemGroup>
     <MSBuild Projects="@(_XrmToolsProducer)" Targets="GetTargetFrameworks"
              Properties="%(_XrmToolsProducer.SetConfiguration);%(_XrmToolsProducer.SetPlatform)"
@@ -41,7 +41,12 @@
              RemoveProperties="%(_XrmToolsProducer.GlobalPropertiesToRemove);$(_GlobalPropertiesToRemoveFromProjectReferences);TargetFramework"
              Condition="'$(BuildProjectReferences)' != 'false' and '@(_XrmToolsFrameworks->'%(HasSingleTargetFramework)')' == 'false'" />
     <Message Importance="Low" Text="XrmTools.Build: packing %(_XrmToolsProducer.Identity). A working Pack target is required; restore producer dependencies before building. Package output paths and NuGet versions are owned by the producer." />
-    <MSBuild Projects="@(_XrmToolsProducer)" Targets="Pack"
+    <XrmTools.Build.Tasks.PreparePackAdapter Producer="@(_XrmToolsProducer)"
+        AdapterPath="$(MSBuildThisFileDirectory)ProducerPackAdapter.targets"
+        RemoveProperties="%(_XrmToolsProducer.GlobalPropertiesToRemove);$(_GlobalPropertiesToRemoveFromProjectReferences);TargetFramework;XrmToolsSolutionVersion;XrmToolsResolvedSolutionVersion">
+      <Output TaskParameter="Prepared" ItemName="_XrmToolsPackProducer" />
+    </XrmTools.Build.Tasks.PreparePackAdapter>
+    <MSBuild Projects="@(_XrmToolsPackProducer)" Targets="Pack"
              Properties="%(_XrmToolsProducer.SetConfiguration);%(_XrmToolsProducer.SetPlatform);NoBuild=true"
              RemoveProperties="%(_XrmToolsProducer.GlobalPropertiesToRemove);$(_GlobalPropertiesToRemoveFromProjectReferences);TargetFramework;XrmToolsSolutionVersion;XrmToolsResolvedSolutionVersion"
              ContinueOnError="ErrorAndContinue">
@@ -49,23 +54,22 @@
     </MSBuild>
     <Error Code="XTB3000" Condition="'$(MSBuildLastTaskResult)' != 'true'"
            Text="XrmTools.Build: Pack failed for %(_XrmToolsProducer.Identity). Ensure the producer provides Pack and its dependencies are restored; artifact overrides do not bypass producer packaging." />
-    <MSBuild Projects="@(_XrmToolsProducer)" Targets="XrmToolsGetPluginPackageArtifact"
+    <MSBuild Projects="@(_XrmToolsPackProducer)" Targets="XrmToolsGetPluginPackageArtifact"
              Properties="%(_XrmToolsProducer.SetConfiguration);%(_XrmToolsProducer.SetPlatform);NoBuild=true"
              RemoveProperties="%(_XrmToolsProducer.GlobalPropertiesToRemove);$(_GlobalPropertiesToRemoveFromProjectReferences);TargetFramework;XrmToolsSolutionVersion;XrmToolsResolvedSolutionVersion"
              SkipNonexistentTargets="true"
-             Condition="'%(_XrmToolsProducer.XrmToolsPluginPackagePath)' == '' or '%(_XrmToolsProducer.XrmToolsPluginPackageId)' == '' or '%(_XrmToolsProducer.XrmToolsPluginPackageVersion)' == ''">
+             Condition="'%(_XrmToolsProducer.XrmToolsPluginPackagePath)' == ''">
       <Output TaskParameter="TargetOutputs" ItemName="_XrmToolsContractOutput" />
     </MSBuild>
-    <MSBuild Projects="@(_XrmToolsProducer)" Targets="_GetOutputItemsFromPack"
+    <MSBuild Projects="@(_XrmToolsPackProducer)" Targets="_XrmToolsGetPackEvidence"
              Properties="%(_XrmToolsProducer.SetConfiguration);%(_XrmToolsProducer.SetPlatform);NoBuild=true"
              RemoveProperties="%(_XrmToolsProducer.GlobalPropertiesToRemove);$(_GlobalPropertiesToRemoveFromProjectReferences);TargetFramework;XrmToolsSolutionVersion;XrmToolsResolvedSolutionVersion"
              SkipNonexistentTargets="true"
-             Condition="'@(_XrmToolsContractOutput)' == '' and ('%(_XrmToolsProducer.XrmToolsPluginPackagePath)' == '' or '%(_XrmToolsProducer.XrmToolsPluginPackageId)' == '' or '%(_XrmToolsProducer.XrmToolsPluginPackageVersion)' == '')">
+             Condition="('%(_XrmToolsProducer.XrmToolsPluginPackagePath)' == '' and '@(_XrmToolsContractOutput)' == '') or ('%(_XrmToolsProducer.XrmToolsPluginPackagePath)' != '' and ('%(_XrmToolsProducer.XrmToolsPluginPackageId)' == '' or '%(_XrmToolsProducer.XrmToolsPluginPackageVersion)' == ''))">
       <Output TaskParameter="TargetOutputs" ItemName="_XrmToolsAdapterOutput" />
     </MSBuild>
     <XrmTools.Build.Tasks.ValidateArtifact Producer="@(_XrmToolsProducer)"
                                           SolutionDirectory="$(MSBuildProjectDirectory)"
-                                          DiscoveryStartedUtcTicks="$(_XrmToolsDiscoveryStartedUtcTicks)"
                                           ContractOutputs="@(_XrmToolsContractOutput)"
                                           AdapterOutputs="@(_XrmToolsAdapterOutput)">
       <Output TaskParameter="Artifacts" ItemName="XrmToolsPluginPackageArtifact" />

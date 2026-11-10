@@ -1,0 +1,33 @@
+<Project>
+  <!-- Chain the producer's evaluated hooks; this import applies only to the isolated NoBuild pack instance. -->
+  <Import Project="$(XrmToolsOriginalAfterCommon)"
+          Condition="'$(IsCrossTargetingBuild)' != 'true' and '$(XrmToolsOriginalAfterCommon)' != '' and Exists('$(XrmToolsOriginalAfterCommon)')" />
+  <Import Project="$(XrmToolsOriginalAfterCrossTargeting)"
+          Condition="'$(IsCrossTargetingBuild)' == 'true' and '$(XrmToolsOriginalAfterCrossTargeting)' != '' and Exists('$(XrmToolsOriginalAfterCrossTargeting)')" />
+
+  <Target Name="_XrmToolsInvalidateIncrementalPack" AfterTargets="_CalculateInputsOutputsForPack">
+    <PropertyGroup>
+      <_XrmToolsPackInvalidated>true</_XrmToolsPackInvalidated>
+    </PropertyGroup>
+    <!-- A nonexistent input makes GenerateNuspec execute independently of timestamp resolution.
+         Do not touch/delete user artifacts or override NuGet's target definitions. -->
+    <ItemGroup>
+      <NuGetPackInput Include="$(MSBuildProjectDirectory)/obj/XrmTools/$([System.Guid]::NewGuid()).pack-input" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="_XrmToolsGetPackEvidence" DependsOnTargets="Pack;_GetOutputItemsFromPack"
+          Returns="@(_XrmToolsPackEvidence)">
+    <ItemGroup>
+      <_XrmToolsPackEvidence Include="@(_OutputPackItems)">
+        <XrmToolsEvaluatedPackageId>$(PackageId)</XrmToolsEvaluatedPackageId>
+        <XrmToolsEvaluatedPackageVersion>$(PackageVersion)</XrmToolsEvaluatedPackageVersion>
+        <XrmToolsNuspecFile>$(NuspecFile)</XrmToolsNuspecFile>
+        <XrmToolsVersionless>$(OutputFileNamesWithoutVersion)</XrmToolsVersionless>
+        <XrmToolsIsPackable>$(IsPackable)</XrmToolsIsPackable>
+        <XrmToolsPackInvalidated>$(_XrmToolsPackInvalidated)</XrmToolsPackInvalidated>
+        <XrmToolsContinuePacking>$(ContinuePackingAfterGeneratingNuspec)</XrmToolsContinuePacking>
+      </_XrmToolsPackEvidence>
+    </ItemGroup>
+  </Target>
+</Project>

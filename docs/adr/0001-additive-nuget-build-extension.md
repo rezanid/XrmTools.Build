@@ -56,8 +56,14 @@ mutations. Pack retains producer-owned versions and paths. Selection prefers an
 exact reference override, then an optional producer Returns target, then the
 version-sensitive NuGet `_GetOutputItemsFromPack` adapter. The installed adapter
 omits some custom naming inputs, so predicted paths must not be trusted alone.
-Unchanged pre-existing adapter results fail closed; explicit contracts authorize
-incremental reuse without disabling package identity validation.
+The initial timestamp gate incorrectly rejected valid repeat builds and has been
+replaced: an isolated producer import forces standard NuGet packaging execution
+via a nonexistent input, and returns current evaluated identity/naming evidence.
+Compilation remains incremental; Pack is regenerated without changing producer
+versions/output paths or overriding NuGet targets. Custom import hooks are chained.
+Unsupported custom/versionless predictions still fail closed. Explicit artifact
+paths never consult lower-priority producer-return targets; missing expected
+metadata must come from unambiguous current producer identity or explicit fields.
 
 A small netstandard2.0 helper inspects the actual package nuspec and uses
 NuGet.Versioning for identity semantics; built-in XML tasks cannot inspect ZIP
@@ -65,7 +71,9 @@ entries or implement NuGet version normalization safely. Its private dependencie
 are shipped under tools, not as consumer NuGet dependencies. A second task in the
 same assembly copies resolved reference dimensions onto private producer items.
 No source XML or solution staging is added. Detailed contracts, evidence and
-limitations are in [artifact discovery](../artifact-discovery.md).
+limitations, including the deliberate packaging-performance tradeoff and the
+net8.0/net472 host-evaluation helper, are in
+[artifact discovery](../artifact-discovery.md).
 
 ## Consequences
 

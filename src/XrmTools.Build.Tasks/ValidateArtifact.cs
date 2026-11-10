@@ -16,7 +16,6 @@ namespace XrmTools.Build.Tasks
         [Required] public string SolutionDirectory { get; set; } = "";
         public ITaskItem[] ContractOutputs { get; set; } = Array.Empty<ITaskItem>();
         public ITaskItem[] AdapterOutputs { get; set; } = Array.Empty<ITaskItem>();
-        public long DiscoveryStartedUtcTicks { get; set; }
         [Output] public ITaskItem[] Artifacts { get; set; } = Array.Empty<ITaskItem>();
 
         public override bool Execute()
@@ -48,7 +47,20 @@ namespace XrmTools.Build.Tasks
                 if (!File.Exists(path))
                     return Fail("XTB3003", $"Selected artifact '{path}' from {source} does not exist after Pack.");
 
-                if (ContractOutputs.Length > 0)
+                if (source == "NuGetAdapter")
+                {
+                    var evidence = AdapterOutputs.Single(item => IsPrimary(item.ItemSpec));
+                    if (!string.Equals(evidence.GetMetadata("XrmToolsPackInvalidated"), "true", StringComparison.OrdinalIgnoreCase) ||
+                        !string.Equals(evidence.GetMetadata("XrmToolsContinuePacking"), "true", StringComparison.OrdinalIgnoreCase) ||
+                        !string.Equals(evidence.GetMetadata("XrmToolsIsPackable"), "true", StringComparison.OrdinalIgnoreCase) ||
+                        evidence.GetMetadata("XrmToolsNuspecFile").Length > 0 ||
+                        string.Equals(evidence.GetMetadata("XrmToolsVersionless"), "true", StringComparison.OrdinalIgnoreCase))
+                        return Fail("XTB3007", "Automatic discovery cannot certify this producer's internal NuGet output " +
+                            "contract (custom nuspec/versionless naming, disabled packaging, or missing invalidation evidence). " +
+                            "A pre-existing predicted artifact is not accepted. Use an explicit selection contract.");
+                }
+
+                if (overridePath.Length == 0 && ContractOutputs.Length > 0)
                 {
                     var primary = ContractOutputs.Where(item => IsPrimary(item.ItemSpec)).ToArray();
                     if (primary.Length != 1)
@@ -58,19 +70,23 @@ namespace XrmTools.Build.Tasks
                 }
                 if (expectedId.Length == 0 || expectedVersion.Length == 0)
                 {
-                    var nuspecs = AdapterOutputs.Where(item =>
-                        string.Equals(Path.GetExtension(item.ItemSpec), ".nuspec", StringComparison.OrdinalIgnoreCase) &&
-                        !item.ItemSpec.EndsWith(".symbols.nuspec", StringComparison.OrdinalIgnoreCase)).ToArray();
-                    if (nuspecs.Length != 1 || !File.Exists(Absolute(nuspecs[0].ItemSpec, producerDirectory)))
-                        return Fail("XTB3004", "Expected identity/version is unavailable. The internal NuGet adapter did not " +
-                            "return one existing generated nuspec. Supply PackageId/PackageVersion on the producer return item " +
-                            "or XrmToolsPluginPackageId/XrmToolsPluginPackageVersion on the reference.");
-                    using (var stream = File.OpenRead(Absolute(nuspecs[0].ItemSpec, producerDirectory)))
+                    // Lower-priority artifact paths/counts do not constrain an explicit selection.
+                    // Only their independently evaluated identity metadata can fill missing fields.
+                    var evidence = AdapterOutputs.Select(item => new
                     {
-                        var expected = ReadIdentity(stream);
-                        if (expectedId.Length == 0) expectedId = expected.Id;
-                        if (expectedVersion.Length == 0) expectedVersion = expected.Version;
-                    }
+                        Id = item.GetMetadata("XrmToolsEvaluatedPackageId"),
+                        Version = item.GetMetadata("XrmToolsEvaluatedPackageVersion"),
+                        Nuspec = item.GetMetadata("XrmToolsNuspecFile")
+                    }).Distinct().ToArray();
+                    if (evidence.Length != 1 || evidence[0].Nuspec.Length > 0)
+                        return Fail("XTB3004", "Expected identity/version is unavailable or uses custom nuspec naming. " +
+                            "Supply PackageId/PackageVersion on the selected producer return item or " +
+                            "XrmToolsPluginPackageId/XrmToolsPluginPackageVersion on the explicit reference. " +
+                            "An unrelated lower-priority return item cannot establish identity for an explicit path.");
+                    if (expectedId.Length == 0) expectedId = evidence[0].Id;
+                    if (expectedVersion.Length == 0) expectedVersion = evidence[0].Version;
+                    if (expectedId.Length == 0 || expectedVersion.Length == 0)
+                        return Fail("XTB3004", "The producer adapter did not return evaluated expected identity/version.");
                 }
 
                 using (var archive = ZipFile.OpenRead(path))
@@ -89,10 +105,6 @@ namespace XrmTools.Build.Tasks
                             !VersionComparer.VersionRelease.Equals(expected, version))
                             return Fail("XTB3006", $"Package identity mismatch at '{path}': expected " +
                                 $"'{expectedId} {expectedVersion}', actual '{actual.Id} {actual.Version}'.");
-                        if (source == "NuGetAdapter" && File.GetLastWriteTimeUtc(path).Ticks < DiscoveryStartedUtcTicks)
-                            return Fail("XTB3007", $"The internal adapter selected an unchanged pre-existing artifact '{path}'. " +
-                                "It cannot prove that Pack produced this path in this invocation (including custom nuspec naming " +
-                                "and incremental Pack). Use an explicit path or producer contract for intentional reuse.");
                         var artifact = new TaskItem(Producer);
                         artifact.ItemSpec = path;
                         artifact.SetMetadata("ProducerProject", producerPath);
