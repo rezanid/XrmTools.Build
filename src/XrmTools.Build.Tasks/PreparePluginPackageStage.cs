@@ -22,7 +22,7 @@ namespace XrmTools.Build.Tasks
                 if (!PluginPackageFiles.Within(stage, IntermediateDirectory) ||
                     string.Equals(stage, source, StringComparison.OrdinalIgnoreCase) ||
                     PluginPackageFiles.Within(stage, source) || PluginPackageFiles.Within(source, stage))
-                    throw new InvalidDataException("Solution staging must be strictly inside IntermediateOutputPath and disjoint from SolutionRootPath (neither may contain the other).");
+                    throw new InvalidDataException("Solution staging must be strictly inside IntermediateOutputPath and disjoint from SolutionRootPath (neither may contain the other). Configure separate, physical intermediate and source directories.");
                 PluginPackageFiles.NoTreeLinks(source);
                 PluginPackageFiles.NoTreeLinks(stage);
                 // Microsoft's Copy only overlays files. A failed prior build can leave removed packages behind.
@@ -34,7 +34,9 @@ namespace XrmTools.Build.Tasks
             catch (Exception exception) when (exception is IOException || exception is InvalidDataException || exception is ArgumentException ||
                 exception is UnauthorizedAccessException)
             {
-                Log.LogError(null, "XTB4000", null, null, 0, 0, 0, 0, "XrmTools.Build: " + exception.Message);
+                Log.LogError(null, "XTB4000", null, StageDirectory, 0, 0, 0, 0,
+                    $"XrmTools.Build: cannot prepare stage '{StageDirectory}'; SolutionRootPath='{SourceDirectory}', " +
+                    $"IntermediateOutputPath='{IntermediateDirectory}'. " + exception.Message);
                 return false;
             }
         }

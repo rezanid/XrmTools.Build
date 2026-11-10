@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ImportExportXml version="9.2.0.0" languagecode="1033" generatedBy="XrmTools.Build example">
+  <SolutionManifest>
+    <UniqueName>XrmToolsExample</UniqueName>
+    <LocalizedName>XrmTools Example</LocalizedName>
+    <Version>1.2.3.4</Version>
+    <Publisher>
+      <UniqueName>xrmtools</UniqueName>
+      <LocalizedName>XrmTools</LocalizedName>
+      <CustomizationPrefix>xt</CustomizationPrefix>
+    </Publisher>
+    <Managed>0</Managed>
+    <RootComponents />
+  </SolutionManifest>
+</ImportExportXml>

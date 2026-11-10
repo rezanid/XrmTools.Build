@@ -28,7 +28,7 @@
   <Target Name="XrmToolsValidatePackage" AfterTargets="PowerAppsPackage"
           Condition="'$(MSBuildProjectExtension)' == '.cdsproj' and '$(DesignTimeBuild)' != 'true'">
     <Error Code="XTB4002" Condition="'$(_XrmToolsStagedSolutionManifest)' == ''"
-           Text="XrmTools.Build: final validation requires XrmToolsStagePluginPackages in this invocation; an old ZIP is not evidence of a successful build." />
+           Text="XrmTools.Build: final validation of '$(SolutionPackageZipFilePath)' for '$(MSBuildProjectFullPath)' requires XrmToolsStagePluginPackages in this invocation; an old ZIP is not evidence of a successful build. Run Build (or PowerAppsPackage with its staging prerequisites), not XrmToolsValidatePackage alone." />
     <XrmTools.Build.Tasks.ValidateSolutionPackage ZipPath="$(SolutionPackageZipFilePath)"
         SolutionVersion="$(XrmToolsResolvedSolutionVersion)" SolutionManifest="$(_XrmToolsStagedSolutionManifest)"
         Packages="@(_XrmToolsStagedPluginPackage)" PackageType="$(SolutionPackageType)" />

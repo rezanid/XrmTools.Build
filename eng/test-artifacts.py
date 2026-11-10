@@ -447,6 +447,9 @@ class ArtifactValidation(unittest.TestCase):
                 if code:
                     self.assertIn(code, output)
                     self.assertNotIn("MSB4018", output)
+                    self.assertIn(str(artifact), output)
+                    self.assertIn(f"producer '{directory / 'producer.csproj'}'", output)
+                    self.assertIn("expected identity/version", output)
         for manifests in ([], ["one.nuspec", "two.nuspec"]):
             with self.subTest(manifests=manifests):
                 with zipfile.ZipFile(artifact, "w") as archive:
@@ -454,7 +457,9 @@ class ArtifactValidation(unittest.TestCase):
                         archive.writestr(name, "<package/>")
                 self.assertIn("XTB3005", msbuild(project, "-t:Check", success=False, label="nuspec-count"))
         artifact.write_bytes(b"not a zip")
-        self.assertIn("XTB3005", msbuild(project, "-t:Check", success=False, label="corrupt-zip"))
+        output = msbuild(project, "-t:Check", success=False, label="corrupt-zip")
+        self.assertIn("XTB3005", output)
+        self.assertIn(f"exact plugin package '{artifact}'", output)
         with zipfile.ZipFile(artifact, "w") as archive:
             archive.writestr("Test.Package.nuspec",
                              "<package><metadata><id>Test.Package</id><version>1.2.0</version></metadata></package>")

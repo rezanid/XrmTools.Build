@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <PackageId>Example.Plugin</PackageId>
+    <PackageVersion>2.3.4-beta.1</PackageVersion>
+    <PackageOutputPath>packages/</PackageOutputPath>
+  </PropertyGroup>
+</Project>

@@ -20,6 +20,7 @@ namespace XrmTools.Build.Tasks
 
         public override bool Execute()
         {
+            var selectedPath = Producer.GetMetadata("XrmToolsPluginPackagePath");
             try
             {
                 var producerPath = Producer.GetMetadata("FullPath");
@@ -42,6 +43,7 @@ namespace XrmTools.Build.Tasks
                     path = Absolute(candidates[0].ItemSpec, producerDirectory);
                 }
 
+                selectedPath = path;
                 if (!IsPrimary(path))
                     return Fail("XTB3002", $"'{path}' is not a primary .nupkg (symbols packages are excluded).");
                 if (!File.Exists(path))
@@ -121,14 +123,14 @@ namespace XrmTools.Build.Tasks
             catch (Exception exception) when (exception is IOException || exception is InvalidDataException ||
                 exception is XmlException || exception is ArgumentException || exception is UnauthorizedAccessException)
             {
-                return Fail("XTB3005", $"Cannot validate the exact plugin package: {exception.Message}");
+                return Fail("XTB3005", $"Cannot validate the exact plugin package '{selectedPath}': {exception.Message}");
             }
         }
 
         private bool Fail(string code, string message)
         {
             Log.LogError(null, code, null, Producer.ItemSpec, 0, 0, 0, 0,
-                "XrmTools.Build: " + message + " Use an exact XrmToolsPluginPackagePath or " +
+                $"XrmTools.Build: producer '{Producer.GetMetadata("FullPath")}': " + message + " Use an exact XrmToolsPluginPackagePath or " +
                 "XrmToolsGetPluginPackageArtifact Returns contract with expected identity/version. No directory search is performed.");
             return false;
         }

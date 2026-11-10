@@ -100,6 +100,9 @@ class StagingIntegration(unittest.TestCase):
                     result = targets.msbuild(project, f"-t:{target}", success=False, label="invalid-solution-shape")
                     self.assertIn(code, result)
                     self.assertNotIn("MSB4018", result)
+                    self.assertIn(str(directory), result)
+                    self.assertIn("9.8.7.6", result)
+                    self.assertIn("Correct the source" if target == "Stage" else "Rebuild successfully", result)
 
     def test_source_only_packages_zero_producers_and_encoding_metadata_preservation(self):
         for microsoft, namespace, encoding in (("2.13.1", "", "utf-8"), ("2.14.1", "urn:fixture", "utf-16")):
@@ -319,6 +322,10 @@ class StagingIntegration(unittest.TestCase):
         for stage in (source, source.parent, source / "nested", project.parent / "not-intermediate"):
             result = build(project, {"SolutionPackagerMetadataWorkingDirectory": str(stage)}, success=False)
             self.assertTrue("XTB4000" in result or "XTB1000" in result)
+            self.assertIn(str(stage), result)
+            if "XTB4000" in result:
+                self.assertIn("SolutionRootPath=", result)
+                self.assertIn("IntermediateOutputPath=", result)
         self.assertEqual(before, {p: p.read_bytes() for p in before})
         link = project.parent / "obj/linked-source"
         link.parent.mkdir(parents=True, exist_ok=True)
@@ -388,6 +395,25 @@ with zipfile.ZipFile(path, "w") as z:
                         with zipfile.ZipFile(archive) as package:
                             self.assertEqual(xml(package, "pluginpackages/old_SourceOnly/pluginpackage.xml").findtext("version"), "9.8.7.6")
                             self.assertEqual(xml(package, "solution.xml").findtext("./SolutionManifest/Version"), "9.8.7.6")
+
+    def test_both_diagnostic_identifies_actual_failing_managed_zip(self):
+        project, source, _ = fixture("managed-diagnostic", False)
+        manifest = source / "Other/Solution.xml"
+        manifest.write_text(manifest.read_text().replace("<Managed>0</Managed>", "<Managed>2</Managed>"))
+        path = project.parent / "custom output/solution.zip"
+        managed = path.with_stem(path.stem + "_managed")
+        def inject(root):
+            target = ET.SubElement(root, NS + "Target", Name="RemoveManagedZip",
+                                   BeforeTargets="XrmToolsValidatePackage")
+            ET.SubElement(target, NS + "Delete", Files=str(managed))
+        edit_project(project, inject)
+        result = build(project, {"SolutionPackageType": "Both", "SolutionPackageZipFilePath": str(path)},
+                       success=False)
+        self.assertIn("XTB4002", result)
+        self.assertIn(f"failed for '{managed}'", result)
+        self.assertIn("SolutionPackageType='Both'", result)
+        self.assertIn("Rebuild successfully with isolated output paths", result)
+        self.assertNotIn("validated final solution ZIP", result)
 
 
 if __name__ == "__main__":

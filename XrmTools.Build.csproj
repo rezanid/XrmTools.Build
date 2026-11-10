@@ -2,11 +2,14 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <PackageId>XrmTools.Build</PackageId>
-    <Version>0.4.0-phase5</Version>
+    <Version>0.5.0-phase6</Version>
     <Authors>XrmTools</Authors>
     <Description>Optional MSBuild extensions for Microsoft Dataverse solution projects.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReleaseNotes>Phase 6: contextual diagnostics, verified execution contracts, isolated parallel-build regressions and package-facing documentation. See docs/release-notes.md in this package.</PackageReleaseNotes>
+    <RepositoryUrl>https://github.com/rezanid/XrmTools.Build</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
@@ -28,9 +31,14 @@
     <None Include="docs/architecture.md" Pack="true" PackagePath="docs/" />
     <None Include="docs/artifact-discovery.md" Pack="true" PackagePath="docs/" />
     <None Include="docs/plugin-package-staging.md" Pack="true" PackagePath="docs/" />
+    <None Include="docs/execution.md" Pack="true" PackagePath="docs/" />
+    <None Include="docs/troubleshooting.md" Pack="true" PackagePath="docs/" />
+    <None Include="docs/release-notes.md" Pack="true" PackagePath="docs/" />
+    <None Include="examples/**/*" Exclude="examples/**/bin/**;examples/**/obj/**;examples/**/packages/**"
+          Pack="true" PackagePath="examples/" />
     <None Include="docs/adr/0001-additive-nuget-build-extension.md" Pack="true" PackagePath="docs/adr/" />
   </ItemGroup>
-  <Target Name="BuildPackAdapters" BeforeTargets="PrepareForBuild">
+  <Target Name="BuildPackAdapters" BeforeTargets="PrepareForBuild" Condition="'$(NoBuild)' != 'true'">
     <MSBuild Projects="src/XrmTools.Build.AdapterTasks/XrmTools.Build.AdapterTasks.csproj"
              Targets="Build" Properties="Configuration=$(Configuration)"
              RemoveProperties="TargetFramework" />

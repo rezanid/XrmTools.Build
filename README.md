@@ -5,7 +5,7 @@
 the consuming project retains control of the
 `Microsoft.PowerApps.MSBuild.Solution` version.
 
-## Implemented through Phase 5
+## Implemented through Phase 6
 
 The package currently proves conventional NuGet `build/` asset imports and a
 per-solution Dataverse version resolver. On a `.cdsproj`, resolution precedence is:
@@ -43,7 +43,7 @@ it:
 ```xml
 <ItemGroup>
   <PackageReference Include="Microsoft.PowerApps.MSBuild.Solution" Version="2.14.1" />
-  <PackageReference Include="XrmTools.Build" Version="0.4.0-phase5" PrivateAssets="all" />
+  <PackageReference Include="XrmTools.Build" Version="0.5.0-phase6" PrivateAssets="all" />
 </ItemGroup>
 ```
 
@@ -175,13 +175,37 @@ diagnostics, overhead, and [complete pipeline review](docs/architecture.md#phase
 
 ## Build and fixture
 
+For runnable project files, see the packaged [solution/producer example](examples/README.md).
+This prerelease is unpublished; the example documents local-feed use. It proves
+packaging plumbing, not Dataverse registration/import support.
+
+### Execution and troubleshooting
+
+Use `dotnet build MySolution.cdsproj` to create the solution ZIP. The tested
+Microsoft solution SDKs have **no NuGet Pack target** on `.cdsproj`.
+Restore and `XrmToolsPrintConfiguration` / `XrmToolsGetPluginPackageProjects` do
+not build or pack producers; discovery and staging targets intentionally do.
+`NoBuild=true` alone is not a solution skip switch. With
+`BuildProjectReferences=false`, all reference outputs must already exist for the
+same build dimensions; producer packaging is still regenerated and validated.
+
+Clean uses Microsoft's existing pipeline, including recursive deletion of its
+configured output/intermediate/working directories. Keep user NuGet stores
+separate from those directories; XrmTools.Build adds no package-store cleanup.
+Concurrent shared-output writers (including Clean alongside Build) are
+unsupported: isolate every project's intermediate, compile, NuGet, ZIP and log
+paths. See the [complete execution table and isolation example](docs/execution.md),
+[troubleshooting by diagnostic](docs/troubleshooting.md) and
+[release notes](docs/release-notes.md).
+
 Run the package-first regression suite with .NET, Python 3, Node/npm, and Bash:
 
 ```sh
 ./eng/test-package.sh
 ```
 
-The script packs the local NuGet package and exercises real restored assets,
+The script packs the local NuGet package, checks its README/license metadata,
+build assets and helper DLLs, builds the extracted example, and exercises real restored assets,
 version precedence/no-op stamping, invalid input, and mixed references with zero,
 one, and two producers. It checks recursive NuGet restore graphs, metadata/build
 dimensions, single producer builds, and Microsoft's final solution ZIP, including
@@ -197,6 +221,9 @@ versionless output, symbols, NBGV, multi-target builds, invalid/ambiguous/missin
 artifacts, and Phase 3 failure recovery. `python3 eng/test-staging.py` exercises
 metadata preservation, source-only packages, configuration/version transitions,
 failure recovery, path safety, managed/Both outputs, and final-ZIP tampering.
+`python3 eng/test-execution.py` covers cold/warm Restore and read-only queries,
+Clean/recovery/Rebuild with user package stores, solution Pack/NoBuild semantics
+and simultaneous same-source builds with isolated per-run/per-project paths.
 The suite includes repeated actual
 `dotnet build` calls with changed code/payloads, and passes locally on the tooling
 below. Hosted results are recorded with the pull request.
@@ -215,7 +242,7 @@ range; changed/missing target definitions still require compatibility investigat
 | .NET SDK 10.0.403 / MSBuild 18.9.15 on macOS arm64 | Real packaging passed with Microsoft solution packages 2.13.1 and 2.14.1, and PCF package 2.14.1; not a broad platform certification |
 | Visual Studio MSBuild on Windows | Not yet tested |
 | Linux; IDE design-time/static-graph builds; other Microsoft versions | Not yet tested |
-| GitHub Actions / .NET 10.0.x on Windows and macOS | Phase 4 passed in [run 42715091002](https://github.com/rezanid/XrmTools.Build/actions/runs/42715091002). Phase 5 runs 48 methods with both Microsoft solution versions; current hosted results are recorded in the pull request |
+| GitHub Actions / .NET 10.0.x on Windows and macOS | Phase 5's 48 methods passed in [run 42778369512](https://github.com/rezanid/XrmTools.Build/actions/runs/42778369512), with both Microsoft solution versions. Phase 6 results are recorded in its pull request; a workflow definition alone is not passing evidence |
 | Azure DevOps | Not yet tested |
 | Dataverse import or upgrade | Not tested; a successfully packaged ZIP does not prove that replacing an existing server-side plugin package is supported |
 
