@@ -1,8 +1,8 @@
 # XrmTools.Build — Phased implementation plan
 
-**Status:** Phases 0–6 merged as development milestones; producer-contract prototype is next; release compatibility and deployment certification remain outstanding
+**Status:** Phases 0–6 merged; consumer-contract prototype completed with a defer recommendation; release compatibility and deployment certification remain outstanding
 **Prepared:** 9 November 2026
-**Updated:** 10 November 2026, after Phase 6 merge (`8556e38`, PR #3)
+**Updated:** 11 November 2026, PR #5 recognition revision after reviewed commit `5a22cf9`
 **Scope:** A small NuGet package providing MSBuild `.props` and `.targets` to extend Microsoft's existing Dataverse solution projects (`.cdsproj`) and optional plugin-producing `.csproj` projects.
 
 ## 0. Current decisions and next gate (authoritative)
@@ -20,7 +20,8 @@ No claim of desktop Visual Studio or Dataverse support follows from milestone co
 | Phases 0–4 | Merged in PR #1; package imports, solution versioning, explicit producer classification and validated artifact discovery implemented. Original cross-environment exit gates remain subject to the support table. |
 | Phase 5 | Merged in PR #2; intermediate package/metadata staging and final Microsoft ZIP validation; 48 regression methods passed on Windows/macOS CLI. |
 | Phase 6 | Merged in PR #3; diagnostics, execution contracts, package documentation/examples and extension-package NoBuild fix; 55 methods passed on Windows/macOS CLI. |
-| Next | A separately scoped producer-capability/output-contract prototype, before broad Phase 7 certification. |
+| Consumer contract | PR #5 now includes a separate evaluated-recognition artifact using real PAC plugin tooling, plus an opt-in SDK artifact. Plain references work in the compatible-framework diagnostic; default restore and ordinary-library limitations remain. No runtime adapter was removed. See `docs/consumer-contract-prototype.md` and ADR 0002. |
+| Next | Resolve the documented Visual Studio gates and decide whether a marker-free producer contract can preserve the tested Microsoft reference boundary. |
 | Phases 7–8 | Not complete. Deployment, desktop IDE and broader compatibility evidence, migration and release remain gated. |
 
 Phase 6 CI: https://github.com/rezanid/XrmTools.Build/actions/runs/42791867282
@@ -92,6 +93,44 @@ ADR. Do not remove existing safeguards or declare the new contract production-re
 until the evidence supports adoption. Documentation alone does not resolve risky
 behavior. Small performance costs are acceptable; unexpected execution/state
 changes are not acceptable merely to preserve automatic setup.
+
+### Consumer-contract prototype result
+
+The prototype evidence is recorded in
+[`docs/consumer-contract-prototype.md`](../docs/consumer-contract-prototype.md)
+and [ADR 0002](../docs/adr/0002-consumer-contract-prototype.md). The recommendation
+is to retain the package-only `PackageReference` entry point for now and defer
+making either the producer-owned capability contract or thin SDK the default.
+The SDK wrapper imports the same core successfully, but it does not remove the
+marker, reference-filter adapter, forced NuGet packaging, or metadata-staging
+reset; it adds an SDK resolver/source/version pin outside the normal package
+restore graph. Shorter XML is not sufficient evidence to adopt it.
+It only forwards imports, leaving Microsoft references and project defaults
+in the consumer. It is now excluded from the default package and available only
+with an explicit prototype pack option and a distinct version.
+
+The actual Microsoft `ProcessCdsProjectReferencesOutputs` target still calls
+`GetProjectOutputPath` on every `ProjectReference`, including references with
+`ReferenceOutputAssembly=false`. The revision implements an evaluated capability
+query against Microsoft's `PowerAppsComponentType=Plugin` signal, without child
+XML parsing, Build or Pack. Only the real PAC producer is recognized; ordinary
+libraries with PackageId and XrmTools.Build are not. Plain references need no
+marker, unique name or ReferenceOutputAssembly metadata in the compatible-net48
+diagnostic, while the existing scoped reference filter remains necessary.
+The default net462 solution/PAC net48 producer fails Restore with NU1201; adding
+an ordinary class library preserves Microsoft's MSB4057 output-target failure.
+These limitations are not hidden by reference mutations or project rewrites.
+The current producer-return target reports an exact artifact path and identity;
+the standard-package freshness guarantee still depends on the isolated NuGet
+adapter. No safe generic replacement was demonstrated. Recognition is evaluated
+independently of adapter removal in a distinct `0.5.0-recognition` local artifact,
+not adopted silently by the default package.
+
+The dated VS smoke-test report named in the investigation request is absent from
+the inspected main and planning branch. The current CLI prototype must not be
+used to claim desktop VS scheduling, restore-host parity, NuGet UI behavior, or
+same-session recovery. The VS test procedure and outstanding gates are listed in
+the prototype report.
 
 ## 1. Objective and design principles
 
@@ -479,22 +518,21 @@ For each ZIP, assert:
 
 ## 10. Next work session
 
-Use a fresh implementer session and new worktree/feature branch from latest remote
-main. Read `AGENTS.md`, this plan, current implementation, tests and architecture
-records. Start the §0 producer-contract prototype; do not restart Phases 0–6 or
-continue straight to Phase 7 certification against an assumed final architecture.
+Do not treat the prototype result as adoption of the SDK or a new producer
+contract. First run the manual VS procedure in
+[`docs/consumer-contract-prototype.md`](../docs/consumer-contract-prototype.md)
+on a supported Windows desktop with the intended VS/MSBuild and Xrm Tools
+extension. Capture the PackageReference created by NuGet UI, restore/build logs,
+the final ZIP and embedded package bytes, PCF source-change scheduling, hook
+ordering/invocation counts, and same-process failure/recovery.
 
-First map the actual restored Microsoft reference-output contract and our producer
-packaging contract. Build the smallest end-to-end experiment using the real built
-NuGet package, a CLI-generated solution project and participating producers.
-Demonstrate ordinary Add Project Reference semantics without marker XML or reference
-mutation. Verify exact fresh package outputs without the private isolated adapter.
-Assess NBGV/version controls as part of the consumer contract, keeping public API
-changes explicit and documenting migration from the baseline.
-
-Retain independent final-ZIP and source-preservation checks. Record evidence and
-limitations, including unavailable VS tests, and propose an adoption decision in
-an ADR and reviewable PR. Do not merge, publish, deploy, or imply stable support.
-The consumer simplification is a goal to prove, not permission to trade away build
-compatibility. Subsequent sessions proceed to Phase 7 only after the architecture
-decision and any required adoption work are reviewed.
+After those results, either revise the producer contract with a concrete,
+non-mutating Microsoft reference-output integration supported by real MSBuild
+evidence, or explicitly retain the scoped filter and its documented trade-offs.
+Do not remove the isolated package adapter until a producer-owned target proves
+current package content for source, package inputs, identity/version and
+configuration changes without relying on timestamps or private NuGet targets.
+Keep NBGV configuration/override semantics independent from the solution SDK
+decision. Proceed to broader Phase 7 certification only after those gates have a
+reviewed disposition. Do not merge, publish, deploy, or claim unverified host
+support.

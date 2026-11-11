@@ -1,0 +1,42 @@
+<Project>
+  <UsingTask TaskName="XrmTools.Build.Tasks.RecognizeProducers"
+             AssemblyFile="$(MSBuildThisFileDirectory)../../tools/netstandard2.0/XrmTools.Build.Tasks.dll" />
+  <!-- The Microsoft plugin targets set this evaluated property; PackageId alone is not a capability. -->
+  <Target Name="XrmToolsGetProducerCapability" Returns="@(_XrmToolsProducerCapability)">
+    <ItemGroup>
+      <_XrmToolsProducerCapability Include="$(MSBuildProjectFullPath)"
+                                  Condition="'$(PowerAppsComponentType)' == 'Plugin' and '$(IsPackable)' != 'false'">
+        <Capability>MicrosoftPluginPackage</Capability>
+      </_XrmToolsProducerCapability>
+    </ItemGroup>
+  </Target>
+
+  <Target Name="_XrmToolsRecognizePluginPackageProjects"
+          BeforeTargets="XrmToolsGetPluginPackageProjects"
+          Condition="'$(MSBuildProjectExtension)' == '.cdsproj'">
+    <ItemGroup>
+      <_XrmToolsCapabilityCandidate Include="@(ProjectReference)"
+                                   Condition="'%(ProjectReference.Extension)' == '.csproj' and '%(ProjectReference.XrmToolsPluginPackage)' == ''" />
+    </ItemGroup>
+    <MSBuild Projects="@(_XrmToolsCapabilityCandidate)" Targets="XrmToolsGetProducerCapability"
+             SkipNonexistentTargets="true"
+             RemoveProperties="TargetFramework;RuntimeIdentifier;SelfContained;XrmToolsSolutionVersion;XrmToolsResolvedSolutionVersion">
+      <Output TaskParameter="TargetOutputs" ItemName="_XrmToolsCapability" />
+    </MSBuild>
+    <XrmTools.Build.Tasks.RecognizeProducers References="@(_XrmToolsCapabilityCandidate)" Capabilities="@(_XrmToolsCapability)">
+      <Output TaskParameter="Recognized" ItemName="_XrmToolsRecognizedPluginPackageProject" />
+    </XrmTools.Build.Tasks.RecognizeProducers>
+  </Target>
+
+  <Target Name="_XrmToolsSelectCurrentRecognizedReferences"
+          BeforeTargets="_XrmToolsFilterMicrosoftProjectOutputs"
+          Condition="'$(MSBuildProjectExtension)' == '.cdsproj'">
+    <ItemGroup>
+      <_XrmToolsCurrentCandidate Include="@(ProjectReference)"
+                                Condition="'%(ProjectReference.XrmToolsPluginPackage)' == ''" />
+    </ItemGroup>
+    <XrmTools.Build.Tasks.RecognizeProducers References="@(_XrmToolsCurrentCandidate)" Capabilities="@(_XrmToolsCapability)">
+      <Output TaskParameter="Recognized" ItemName="_XrmToolsCurrentRecognizedReference" />
+    </XrmTools.Build.Tasks.RecognizeProducers>
+  </Target>
+</Project>

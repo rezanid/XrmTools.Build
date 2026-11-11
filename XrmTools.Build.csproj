@@ -25,6 +25,9 @@
     <None Include="build/XrmTools.Build.props" Pack="true" PackagePath="build/" />
     <None Include="build/XrmTools.Build.targets" Pack="true" PackagePath="build/" />
     <None Include="build/targets/*.targets" Pack="true" PackagePath="build/targets/" />
+    <None Include="Sdk/*" Pack="true" PackagePath="Sdk/" Condition="'$(XrmToolsPrototypeSdk)' == 'true'" />
+    <None Include="experiments/ProducerRecognition.targets" Pack="true" PackagePath="build/experiments/"
+          Condition="'$(XrmToolsPrototypeRecognition)' == 'true'" />
     <None Include="README.md" Pack="true" PackagePath="/" />
     <None Include="LICENSE" Pack="true" PackagePath="licenses/" />
     <None Include="licenses/NuGet.Versioning.txt" Pack="true" PackagePath="licenses/" />
@@ -34,10 +37,16 @@
     <None Include="docs/execution.md" Pack="true" PackagePath="docs/" />
     <None Include="docs/troubleshooting.md" Pack="true" PackagePath="docs/" />
     <None Include="docs/release-notes.md" Pack="true" PackagePath="docs/" />
+    <None Include="docs/consumer-contract-prototype.md" Pack="true" PackagePath="docs/" />
     <None Include="examples/**/*" Exclude="examples/**/bin/**;examples/**/obj/**;examples/**/packages/**"
           Pack="true" PackagePath="examples/" />
     <None Include="docs/adr/0001-additive-nuget-build-extension.md" Pack="true" PackagePath="docs/adr/" />
+    <None Include="docs/adr/0002-consumer-contract-prototype.md" Pack="true" PackagePath="docs/adr/" />
   </ItemGroup>
+  <Target Name="ValidatePrototypePackageVersion" BeforeTargets="_GetOutputItemsFromPack;GenerateNuspec;Pack">
+    <Error Condition="('$(XrmToolsPrototypeSdk)' == 'true' or '$(XrmToolsPrototypeRecognition)' == 'true') and '$(PackageVersion)' == '$(Version)'"
+           Text="Prototype assets require a distinct PackageVersion to isolate NuGet resolution from the default package." />
+  </Target>
   <Target Name="BuildPackAdapters" BeforeTargets="PrepareForBuild" Condition="'$(NoBuild)' != 'true'">
     <MSBuild Projects="src/XrmTools.Build.AdapterTasks/XrmTools.Build.AdapterTasks.csproj"
              Targets="Build" Properties="Configuration=$(Configuration)"

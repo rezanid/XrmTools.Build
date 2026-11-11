@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest>
+  <control namespace="XrmToolsExample" constructor="ExampleControl" version="1.0.0"
+           display-name-key="ExampleControl" description-key="ExampleControl" control-type="standard">
+    <property name="value" display-name-key="Value" of-type="SingleLine.Text" usage="bound" required="true" />
+    <resources>
+      <code path="bundle.js" order="1" />
+    </resources>
+  </control>
+</manifest>

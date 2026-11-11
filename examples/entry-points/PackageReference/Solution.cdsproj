@@ -1,0 +1,20 @@
+<Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)/$(MSBuildToolsVersion)/Microsoft.Common.props" />
+  <PropertyGroup>
+    <TargetFrameworkVersion>v4.6.2</TargetFrameworkVersion>
+    <TargetFramework>net462</TargetFramework>
+    <RestoreProjectStyle>PackageReference</RestoreProjectStyle>
+    <SolutionRootPath>../../Solution/src</SolutionRootPath>
+    <MicrosoftSolutionBuildVersion>2.14.1</MicrosoftSolutionBuildVersion>
+    <XrmToolsBuildVersion>0.5.0-phase6</XrmToolsBuildVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.PowerApps.MSBuild.Solution" Version="$(MicrosoftSolutionBuildVersion)" />
+    <PackageReference Include="XrmTools.Build" Version="$(XrmToolsBuildVersion)" PrivateAssets="all" />
+    <ProjectReference Include="../../Plugin/ExamplePlugin.csproj" ReferenceOutputAssembly="false"
+                      XrmToolsPluginPackage="true" XrmToolsPluginPackageUniqueName="xt_ExamplePlugin" />
+    <ProjectReference Include="../../Control/ExampleControl.pcfproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)/Microsoft.Common.targets" />
+</Project>

@@ -21,6 +21,11 @@ a disposable directory, and append
 to the commands. The regression builds this example from the **actual nupkg**,
 not via source target imports.
 
+For side-by-side PackageReference and thin-SDK consumer projects, including a
+source-driven PCF project, see [consumer entry points](entry-points/README.md).
+The SDK form is a prototype import wrapper only; both examples retain the
+current per-reference plugin marker.
+
 The ZIP is `Solution/bin/Debug/Example.zip`; producer NuGet output is separately
 `Plugin/packages/Example.Plugin.2.3.4-beta.1.nupkg`. Solution Clean must not delete
 that separate package store. Build with `-p:IncludeExamplePlugin=false` for

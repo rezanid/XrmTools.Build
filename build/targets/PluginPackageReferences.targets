@@ -1,4 +1,6 @@
 <Project>
+  <Import Project="../experiments/ProducerRecognition.targets"
+          Condition="Exists('$(MSBuildThisFileDirectory)../experiments/ProducerRecognition.targets')" />
   <Target Name="XrmToolsGetPluginPackageProjects"
           BeforeTargets="PrepareProjectReferences;_GenerateRestoreProjectPathWalk"
           Returns="@(XrmToolsPluginPackageProject)"
@@ -9,6 +11,7 @@
     <ItemGroup>
       <XrmToolsPluginPackageProject Include="@(ProjectReference)"
                                    Condition="'%(ProjectReference.XrmToolsPluginPackage)' == 'true'" />
+      <XrmToolsPluginPackageProject Include="@(_XrmToolsRecognizedPluginPackageProject)" />
     </ItemGroup>
     <Error Code="XTB2001" Condition="'@(XrmToolsPluginPackageProject)' != '' and !Exists('%(XrmToolsPluginPackageProject.FullPath)')"
            Text="XrmTools.Build: plugin-package project '%(XrmToolsPluginPackageProject.FullPath)' referenced by $(MSBuildProjectFullPath) does not exist." />
@@ -42,8 +45,13 @@
     <ItemGroup>
       <_XrmToolsTemporarilyFilteredReference Include="@(ProjectReference)"
                                             Condition="'%(ProjectReference.XrmToolsPluginPackage)' == 'true'" />
+      <_XrmToolsTemporarilyFilteredReference Include="@(_XrmToolsCurrentRecognizedReference)" />
       <ProjectReference Remove="@(_XrmToolsTemporarilyFilteredReference)"
-                        MatchOnMetadata="FullPath;XrmToolsPluginPackage" MatchOnMetadataOptions="CaseInsensitive" />
+                        MatchOnMetadata="FullPath;XrmToolsPluginPackage" MatchOnMetadataOptions="CaseInsensitive"
+                        Condition="'%(_XrmToolsTemporarilyFilteredReference.XrmToolsPluginPackage)' == 'true'" />
+      <ProjectReference Remove="@(_XrmToolsCurrentRecognizedReference)"
+                        MatchOnMetadata="FullPath" MatchOnMetadataOptions="CaseInsensitive"
+                        Condition="'%(ProjectReference.XrmToolsPluginPackage)' == ''" />
     </ItemGroup>
   </Target>
 

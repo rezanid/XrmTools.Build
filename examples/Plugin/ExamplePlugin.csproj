@@ -5,4 +5,7 @@
     <PackageVersion>2.3.4-beta.1</PackageVersion>
     <PackageOutputPath>packages/</PackageOutputPath>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="XrmTools.Build" Version="0.5.0-phase6" PrivateAssets="all" />
+  </ItemGroup>
 </Project>
