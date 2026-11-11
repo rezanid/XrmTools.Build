@@ -11,6 +11,7 @@
     <RepositoryUrl>https://github.com/rezanid/XrmTools.Build</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <IncludeBuildOutput>false</IncludeBuildOutput>
+    <DevelopmentDependency>true</DevelopmentDependency>
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
@@ -35,6 +36,7 @@
     <None Include="docs/artifact-discovery.md" Pack="true" PackagePath="docs/" />
     <None Include="docs/plugin-package-staging.md" Pack="true" PackagePath="docs/" />
     <None Include="docs/execution.md" Pack="true" PackagePath="docs/" />
+    <None Include="docs/development-dependency.md" Pack="true" PackagePath="docs/" />
     <None Include="docs/troubleshooting.md" Pack="true" PackagePath="docs/" />
     <None Include="docs/release-notes.md" Pack="true" PackagePath="docs/" />
     <None Include="docs/consumer-contract-prototype.md" Pack="true" PackagePath="docs/" />

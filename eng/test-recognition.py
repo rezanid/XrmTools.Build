@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import uuid
 import xml.etree.ElementTree as ET
 import zipfile
 
@@ -234,6 +235,117 @@ namespace Plugin { public static class Revision { public const string Value = "c
         self.assertIn("Unable to find assembly registration configuration", output)
         self.assertIn("PluginAssemblies", output)
         self.assertFalse((project.parent / "bin/Debug/Solution.zip").exists())
+
+
+class DevelopmentDependency(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        suffix = uuid.uuid4().hex
+        cls.versions = {False: f"0.5.0-nodev-{suffix}", True: f"0.5.0-dev-{suffix}"}
+        for development, version in cls.versions.items():
+            result = subprocess.run(
+                ["dotnet", "pack", str(ROOT / "XrmTools.Build.csproj"), "--no-build",
+                 "--output", str(ARTIFACTS / "local-feed"), "--verbosity", "quiet",
+                 "-p:XrmToolsPrototypeRecognition=true", f"-p:PackageVersion={version}",
+                 f"-p:DevelopmentDependency={str(development).lower()}"],
+                cwd=ROOT, env=ENV, capture_output=True, text=True)
+            if result.returncode:
+                raise AssertionError(result.stdout + result.stderr)
+            with zipfile.ZipFile(ARTIFACTS / f"local-feed/XrmTools.Build.{version}.nupkg") as package:
+                metadata = ET.fromstring(package.read("XrmTools.Build.nuspec")).find("{*}metadata")
+                assert (metadata.findtext("{*}developmentDependency") == "true") == development
+                assert not metadata.findall(".//{*}dependency")
+
+    def exercise(self, name, development, private=None, install=False, include=None):
+        version = self.versions[development]
+        project = fixture(f"development-dependency-{name}", "2.14.1")
+        producer = project.parent / "Plugin/Plugin.csproj"
+        for path in (project, producer):
+            document = ET.parse(path)
+            for group in document.getroot():
+                for reference in list(group):
+                    if reference.get("Include") == "XrmTools.Build":
+                        reference.set("Version", version)
+                        reference.attrib.pop("PrivateAssets", None)
+                        if path == producer:
+                            if private is not None:
+                                reference.set("PrivateAssets", private)
+                            if include is not None:
+                                reference.set("IncludeAssets", include)
+                            if install and private is None:
+                                group.remove(reference)
+            if path == producer:
+                group = ET.SubElement(document.getroot(), "ItemGroup")
+                ET.SubElement(group, "PackageReference", Include="Newtonsoft.Json", Version="13.0.3")
+            document.write(path, encoding="utf-8", xml_declaration=True)
+        if install:
+            result = subprocess.run(
+                ["dotnet", "add", str(producer), "package", "XrmTools.Build", "--version", version],
+                cwd=producer.parent, env=ENV, capture_output=True, text=True)
+            output = result.stdout + result.stderr
+            (project.parent / "install.log").write_text(output)
+            self.assertEqual(result.returncode, 0, output)
+            reference = ET.parse(producer).find(".//PackageReference[@Include='XrmTools.Build']")
+            self.assertEqual(reference.get("PrivateAssets") or reference.findtext("PrivateAssets"),
+                             private or "all")
+            included = reference.get("IncludeAssets") or reference.findtext("IncludeAssets")
+            assets = set(included.lower().replace(" ", "").split(";"))
+            if include is None:
+                self.assertNotIn("compile", assets)
+                self.assertIn("build", assets)
+                self.assertIn("runtime", assets)
+            else:
+                self.assertEqual(assets, set(include.split(";")))
+        before = {path: path.read_bytes() for path in (project, producer)}
+        manifest = project.parent.parent / "Solution/src/Other/Solution.xml"
+        before[manifest] = manifest.read_bytes()
+        command(project, "-t:Restore", label=f"{name}-restore")
+        recognized = query(project)["XrmToolsPluginPackageProject"]
+        self.assertEqual([Path(item["Identity"]).name for item in recognized], ["Plugin.csproj"])
+        self.assertFalse((producer.parent / "bin").exists(), "Restore/query built the producer")
+        for path in (project, producer):
+            self.assertIn("XrmTools.Build imported", command(path, "-t:XrmToolsPrintConfiguration"))
+        for label in ("cold", "repeated", "producer-rebuild"):
+            if label == "producer-rebuild":
+                command(producer, "-t:Rebuild", label=f"{name}-producer-rebuild")
+                command(producer, "-t:Pack", "-p:NoBuild=true", label=f"{name}-producer-pack-nobuild")
+            output = command(project, "-t:Build", "-p:XrmToolsSolutionVersion=4.5.6.7",
+                             label=f"{name}-{label}")
+            verify(project)
+            package = producer.parent / "bin/Debug/Plugin.1.0.0.nupkg"
+            with zipfile.ZipFile(package) as archive:
+                metadata = ET.fromstring(archive.read("Plugin.nuspec")).find("{*}metadata")
+                dependencies = {item.get("id"): item.attrib for item in
+                                metadata.findall(".//{*}dependency")}
+                self.assertEqual(metadata.findtext("{*}version"), "1.0.0")
+                self.assertEqual(dependencies["Newtonsoft.Json"], {
+                    "id": "Newtonsoft.Json", "version": "13.0.3", "exclude": "Build,Analyzers"})
+                excluded = private == "all" or install
+                self.assertEqual("XrmTools.Build" not in dependencies, excluded)
+                if not excluded:
+                    self.assertEqual(dependencies["XrmTools.Build"], {
+                        "id": "XrmTools.Build", "version": version, "exclude": "Build,Analyzers"})
+                    self.assertIn("NU5104", output)
+                else:
+                    self.assertNotIn("NU5104", output)
+                (project.parent / f"{label}-Plugin.nuspec").write_bytes(archive.read("Plugin.nuspec"))
+            self.assertEqual(before, {path: path.read_bytes() for path in before},
+                             "Restore/build modified consumer project or source metadata")
+
+    def test_before_plain_reference_leaks_dependency(self):
+        self.exercise("before-plain", False)
+
+    def test_before_private_assets_control(self):
+        self.exercise("before-private", False, private="all")
+
+    def test_development_dependency_does_not_rewrite_manual_reference(self):
+        self.exercise("after-manual", True)
+
+    def test_install_writes_private_metadata_and_preserves_build_integration(self):
+        self.exercise("after-install", True, install=True)
+
+    def test_install_preserves_explicit_consumer_metadata(self):
+        self.exercise("after-explicit", True, private="all", include="build;analyzers", install=True)
 
 
 if __name__ == "__main__":

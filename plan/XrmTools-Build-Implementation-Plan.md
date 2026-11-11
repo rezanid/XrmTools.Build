@@ -36,6 +36,13 @@ not final architectural requirements. Reference visibility/order and failed
 in-memory recovery remain concerns. Producer compilation remains incremental;
 extra package generation is an accepted performance tradeoff, not proof of safety.
 
+The package now authors `DevelopmentDependency=true` so fresh NuGet client
+installation can write private build-tool reference metadata without a manual
+XML edit. This does not retrofit manual/existing references during restore or
+Pack, and does not change recognition adoption. CLI installation and the precise
+remaining VS NuGet UI check are recorded in
+[`docs/development-dependency.md`](../docs/development-dependency.md).
+
 ### Desired consumer contract
 
 1. Retain the normal CLI-generated Microsoft `.cdsproj`, its Microsoft package
