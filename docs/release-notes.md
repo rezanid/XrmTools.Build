@@ -2,6 +2,14 @@
 
 ## 0.5.0-phase6 (unpublished)
 
+The package now declares `developmentDependency=true`, allowing NuGet installation
+clients to author private build-tool references automatically. A fresh CLI
+installation retains build imports while excluding XrmTools.Build from the
+producer's nuspec; genuine producer dependencies remain. This is not a Pack-time
+filter or a repair of previously installed/manual references. Visual Studio
+NuGet UI installation still needs a focused desktop check. See the
+[investigation and installation boundary](development-dependency.md).
+
 Diagnostics now include active stage/source/intermediate paths, the failing
 artifact/XML/ZIP, relevant input values and corrective guidance. Existing
 XTB1000-XTB4002 codes retain their meanings. Both-output failures identify the
