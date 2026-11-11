@@ -329,11 +329,23 @@ Revision checks add five recognition methods (each applicable matrix runs
 2.13.1/2.14.1) and fix the source-preservation regression: each entry-point build
 now captures and compares the bytes of the **disposable fixture's** `Solution.xml`,
 including the PCF edit/rebuild. It no longer hashes the untouched repository copy.
-Exact revision commands/results, final commit and CI links are recorded in the
-PR description. Local versions remain .NET SDK 10.0.403, MSBuild 18.9.15.52412,
-Python 3.9.6, Node 22.4.0 and npm 10.8.1. CLI support evidence is limited to the
-tested Microsoft versions/hosts; desktop VS, other SDK versions, static graph,
-design-time and Dataverse import/upgrade are not certified.
+The revision's `./eng/test-package.sh` passed **64 methods** locally: 16
+reference/version, 20 artifact, 14 staging, 6 execution, 3 consumer entry-point
+and 5 recognition tests. The command completed successfully; its log is
+`artifacts/revision-package-tests-final.log`. Both Windows and macOS
+[PR checks](https://github.com/rezanid/XrmTools.Build/actions/runs/42922309442)
+and [push checks](https://github.com/rezanid/XrmTools.Build/actions/runs/42922300968)
+passed all 64 methods on implementation commit
+`49989d477443d42f3740ba6e77a25ab8c906ee85`. These results include the late-reference
+metadata regression and separate default/SDK/recognition package inspections.
+
+Local versions remain .NET SDK **10.0.403**, MSBuild **18.9.15.52412**,
+Python **3.9.6**, Node **22.4.0** and npm **10.8.1**. Both revision CI hosts used
+.NET SDK **10.0.404**, Python **3.12.10**, Node **22.23.4** and npm **10.9.9**;
+their MSBuild version was not separately printed in the CI logs. CLI evidence is
+limited to these tested SDKs/hosts and the Microsoft package matrix above;
+desktop VS, other SDK versions, static graph, design-time and Dataverse
+import/upgrade are not certified.
 
 The revision's canonical validation/commit record is
 [PR #5](https://github.com/rezanid/XrmTools.Build/pull/5); its description records
