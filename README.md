@@ -56,6 +56,17 @@ it:
 </ItemGroup>
 ```
 
+The package declares `developmentDependency=true`. NuGet installation clients
+use this to add `PrivateAssets=all` and exclude compile assets automatically;
+build assets remain enabled. This avoids making XrmTools.Build a dependency of
+a plugin producer's published package without a manual XML edit on a fresh
+installation. Manually authored references still need `PrivateAssets="all"`,
+as shown above; restore/Pack do not retrofit missing metadata into existing
+references. The CLI installation path is verified; the corresponding fresh
+Visual Studio NuGet UI installation remains a desktop check.
+See [development-only package installation](docs/development-dependency.md)
+for the before/after nuspec evidence and update boundary.
+
 Set a CI override without changing project files:
 
 ```sh

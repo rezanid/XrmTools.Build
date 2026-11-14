@@ -43,7 +43,7 @@ with zipfile.ZipFile(root / f"artifacts/local-feed/XrmTools.Build.{version}.nupk
                 "tools/netstandard2.0/XrmTools.Build.Tasks.dll", "tools/netstandard2.0/NuGet.Versioning.dll",
                 "tools/net8.0/XrmTools.Build.AdapterTasks.dll", "tools/net472/XrmTools.Build.AdapterTasks.dll",
                 "docs/architecture.md", "docs/artifact-discovery.md", "licenses/NuGet.Versioning.txt",
-                "README.md", "licenses/LICENSE", "docs/execution.md", "docs/troubleshooting.md",
+                "README.md", "licenses/LICENSE", "docs/execution.md", "docs/development-dependency.md", "docs/troubleshooting.md",
                 "docs/release-notes.md", "docs/adr/0001-additive-nuget-build-extension.md",
                 "examples/README.md", "examples/Plugin/ExamplePlugin.csproj", "examples/Plugin/Example.cs",
                 "examples/Solution/Example.cdsproj", "examples/Solution/src/Other/Solution.xml",
@@ -60,6 +60,7 @@ with zipfile.ZipFile(root / f"artifacts/local-feed/XrmTools.Build.{version}.nupk
     assert not any(name.startswith(("lib/", "buildTransitive/")) for name in package.namelist())
     metadata = ET.fromstring(package.read("XrmTools.Build.nuspec")).find("{*}metadata")
     assert not metadata.findall(".//{*}dependency")
+    assert metadata.findtext("{*}developmentDependency") == "true"
     assert metadata.findtext("{*}readme") == "README.md"
     assert metadata.findtext("{*}license") == "MIT"
     assert metadata.find("{*}license").attrib["type"] == "expression"
